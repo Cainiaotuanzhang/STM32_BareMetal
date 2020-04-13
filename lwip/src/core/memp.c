@@ -71,46 +71,13 @@ struct memp {
 #endif /* MEMP_OVERFLOW_CHECK */
 };
 
-#if MEMP_OVERFLOW_CHECK
-/* if MEMP_OVERFLOW_CHECK is turned on, we reserve some bytes at the beginning
- * and at the end of each element, initialize them as 0xcd and check
- * them later. */
-/* If MEMP_OVERFLOW_CHECK is >= 2, on every call to memp_malloc or memp_free,
- * every single element in each pool is checked!
- * This is VERY SLOW but also very helpful. */
-/* MEMP_SANITY_REGION_BEFORE and MEMP_SANITY_REGION_AFTER can be overridden in
- * lwipopts.h to change the amount reserved for checking. */
-#ifndef MEMP_SANITY_REGION_BEFORE
-#define MEMP_SANITY_REGION_BEFORE  16
-#endif /* MEMP_SANITY_REGION_BEFORE*/
-#if MEMP_SANITY_REGION_BEFORE > 0
-#define MEMP_SANITY_REGION_BEFORE_ALIGNED    LWIP_MEM_ALIGN_SIZE(MEMP_SANITY_REGION_BEFORE)
-#else
-#define MEMP_SANITY_REGION_BEFORE_ALIGNED    0
-#endif /* MEMP_SANITY_REGION_BEFORE*/
-#ifndef MEMP_SANITY_REGION_AFTER
-#define MEMP_SANITY_REGION_AFTER   16
-#endif /* MEMP_SANITY_REGION_AFTER*/
-#if MEMP_SANITY_REGION_AFTER > 0
-#define MEMP_SANITY_REGION_AFTER_ALIGNED     LWIP_MEM_ALIGN_SIZE(MEMP_SANITY_REGION_AFTER)
-#else
-#define MEMP_SANITY_REGION_AFTER_ALIGNED     0
-#endif /* MEMP_SANITY_REGION_AFTER*/
 
-/* MEMP_SIZE: save space for struct memp and for sanity check */
-#define MEMP_SIZE          (LWIP_MEM_ALIGN_SIZE(sizeof(struct memp)) + MEMP_SANITY_REGION_BEFORE_ALIGNED)
-#define MEMP_ALIGN_SIZE(x) (LWIP_MEM_ALIGN_SIZE(x) + MEMP_SANITY_REGION_AFTER_ALIGNED)
-
-#else /* MEMP_OVERFLOW_CHECK */
-
-/* No sanity checks
- * We don't need to preserve the struct memp while not allocated, so we
- * can save a little space and set MEMP_SIZE to 0.
+/** 没有健全性检查.我们无需在未分配时保留struct memp,
+    因此可以节省一些空间并将MEMP_SIZE设置为0.
  */
 #define MEMP_SIZE           0
 #define MEMP_ALIGN_SIZE(x) (LWIP_MEM_ALIGN_SIZE(x))
 
-#endif /* MEMP_OVERFLOW_CHECK */
 
 /** This array holds the first free element of each pool.
  *  Elements form a linked list. */
@@ -122,14 +89,15 @@ static struct memp *memp_tab[MEMP_MAX];
 
 #endif /* MEMP_MEM_MALLOC */
 
-/** This array holds the element sizes of each pool. */
-#if !MEM_USE_POOLS && !MEMP_MEM_MALLOC
-static
-#endif
-const u16_t memp_sizes[MEMP_MAX] = {
+
+
+/** 该数组保存每个池的元素大小 */
+static const u16_t memp_sizes[MEMP_MAX] = {
 #define LWIP_MEMPOOL(name,num,size,desc)  LWIP_MEM_ALIGN_SIZE(size),
 #include "lwip/memp_std.h"
 };
+
+
 
 #if !MEMP_MEM_MALLOC /* don't build if not configured for use in lwipopts.h */
 
@@ -139,40 +107,11 @@ static const u16_t memp_num[MEMP_MAX] = {
 #include "lwip/memp_std.h"
 };
 
-/** This array holds a textual description of each pool. */
-#ifdef LWIP_DEBUG
-static const char *memp_desc[MEMP_MAX] = {
-#define LWIP_MEMPOOL(name,num,size,desc)  (desc),
-#include "lwip/memp_std.h"
-};
-#endif /* LWIP_DEBUG */
-
-#if MEMP_SEPARATE_POOLS
-
-/** This creates each memory pool. These are named memp_memory_XXX_base (where
- * XXX is the name of the pool defined in memp_std.h).
- * To relocate a pool, declare it as extern in cc.h. Example for GCC:
- *   extern u8_t __attribute__((section(".onchip_mem"))) memp_memory_UDP_PCB_base[];
- */
-#define LWIP_MEMPOOL(name,num,size,desc) u8_t memp_memory_ ## name ## _base \
-  [((num) * (MEMP_SIZE + MEMP_ALIGN_SIZE(size)))];   
-#include "lwip/memp_std.h"
-
-/** This array holds the base of each memory pool. */
-static u8_t *const memp_bases[] = { 
-#define LWIP_MEMPOOL(name,num,size,desc) memp_memory_ ## name ## _base,   
-#include "lwip/memp_std.h"
-};
-
-#else /* MEMP_SEPARATE_POOLS */
-
-/** This is the actual memory used by the pools (all pools in one big block). */
+/** 这是池(一个大块中的所有池)使用的实际内存. */
 static u8_t memp_memory[MEM_ALIGNMENT - 1 
 #define LWIP_MEMPOOL(name,num,size,desc) + ( (num) * (MEMP_SIZE + MEMP_ALIGN_SIZE(size) ) )
 #include "lwip/memp_std.h"
 ];
-
-#endif /* MEMP_SEPARATE_POOLS */
 
 #if MEMP_SANITY_CHECK
 /**
@@ -197,6 +136,7 @@ memp_sanity(void)
   }
   return 1;
 }
+
 #endif /* MEMP_SANITY_CHECK*/
 #if MEMP_OVERFLOW_CHECK
 #if defined(LWIP_DEBUG) && MEMP_STATS
@@ -334,6 +274,7 @@ memp_overflow_init(void)
  * 
  * 将memp_memory放入每种池类型的链接列表中.
  */
+//ZHENXIAOBO:第一次循环memp的值是不重要的.所有的memp->next均指向了memp_tab[i],但是memp_tab[i]指向了最后一个memp
 void memp_init(void)
 {
     struct memp *memp;
@@ -344,7 +285,7 @@ void memp_init(void)
     {
         memp_tab[i] = NULL;
 
-        /* create a linked list of memp elements */
+        /* 创建一个memp元素的链接列表 */
         for (j = 0; j < memp_num[i]; ++j)
         {
             memp->next = memp_tab[i];

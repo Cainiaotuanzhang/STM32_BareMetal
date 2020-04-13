@@ -79,16 +79,6 @@ typedef enum {
 extern const u16_t memp_sizes[MEMP_MAX];
 #endif /* MEMP_MEM_MALLOC || MEM_USE_POOLS */
 
-#if MEMP_MEM_MALLOC
-
-#include "mem.h"
-
-#define memp_init()
-#define memp_malloc(type)     mem_malloc(memp_sizes[type])
-#define memp_free(type, mem)  mem_free(mem)
-
-#else /* MEMP_MEM_MALLOC */
-
 #if MEM_USE_POOLS
 /** This structure is used to save the pool one element came from. */
 struct memp_malloc_helper
@@ -107,7 +97,6 @@ void *memp_malloc(memp_t type);
 #endif
 void  memp_free(memp_t type, void *mem);
 
-#endif /* MEMP_MEM_MALLOC */
 
 #ifdef __cplusplus
 }

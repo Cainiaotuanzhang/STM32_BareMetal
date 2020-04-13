@@ -47,6 +47,7 @@ LWIP_MEMPOOL(TCP_SEG,        MEMP_NUM_TCP_SEG,         sizeof(struct tcp_seg),  
 #if IP_REASSEMBLY
 LWIP_MEMPOOL(REASSDATA,      MEMP_NUM_REASSDATA,       sizeof(struct ip_reassdata),   "REASSDATA")
 #endif /* IP_REASSEMBLY */
+
 #if IP_FRAG && !IP_FRAG_USES_STATIC_BUF && !LWIP_NETIF_TX_SINGLE_PBUF
 LWIP_MEMPOOL(FRAG_PBUF,      MEMP_NUM_FRAG_PBUF,       sizeof(struct pbuf_custom_ref),"FRAG_PBUF")
 #endif /* IP_FRAG && !IP_FRAG_USES_STATIC_BUF && !LWIP_NETIF_TX_SINGLE_PBUF */
@@ -56,48 +57,24 @@ LWIP_MEMPOOL(NETBUF,         MEMP_NUM_NETBUF,          sizeof(struct netbuf),   
 LWIP_MEMPOOL(NETCONN,        MEMP_NUM_NETCONN,         sizeof(struct netconn),        "NETCONN")
 #endif /* LWIP_NETCONN */
 
-#if NO_SYS==0
-LWIP_MEMPOOL(TCPIP_MSG_API,  MEMP_NUM_TCPIP_MSG_API,   sizeof(struct tcpip_msg),      "TCPIP_MSG_API")
-#if !LWIP_TCPIP_CORE_LOCKING_INPUT
-LWIP_MEMPOOL(TCPIP_MSG_INPKT,MEMP_NUM_TCPIP_MSG_INPKT, sizeof(struct tcpip_msg),      "TCPIP_MSG_INPKT")
-#endif /* !LWIP_TCPIP_CORE_LOCKING_INPUT */
-#endif /* NO_SYS==0 */
 
 #if LWIP_ARP && ARP_QUEUEING
 LWIP_MEMPOOL(ARP_QUEUE,      MEMP_NUM_ARP_QUEUE,       sizeof(struct etharp_q_entry), "ARP_QUEUE")
 #endif /* LWIP_ARP && ARP_QUEUEING */
 
-#if LWIP_IGMP
-LWIP_MEMPOOL(IGMP_GROUP,     MEMP_NUM_IGMP_GROUP,      sizeof(struct igmp_group),     "IGMP_GROUP")
-#endif /* LWIP_IGMP */
+
 
 #if (!NO_SYS || (NO_SYS && !NO_SYS_NO_TIMERS)) /* LWIP_TIMERS */
 LWIP_MEMPOOL(SYS_TIMEOUT,    MEMP_NUM_SYS_TIMEOUT,     sizeof(struct sys_timeo),      "SYS_TIMEOUT")
 #endif /* LWIP_TIMERS */
 
-#if LWIP_SNMP
-LWIP_MEMPOOL(SNMP_ROOTNODE,  MEMP_NUM_SNMP_ROOTNODE,   sizeof(struct mib_list_rootnode), "SNMP_ROOTNODE")
-LWIP_MEMPOOL(SNMP_NODE,      MEMP_NUM_SNMP_NODE,       sizeof(struct mib_list_node),     "SNMP_NODE")
-LWIP_MEMPOOL(SNMP_VARBIND,   MEMP_NUM_SNMP_VARBIND,    sizeof(struct snmp_varbind),      "SNMP_VARBIND")
-LWIP_MEMPOOL(SNMP_VALUE,     MEMP_NUM_SNMP_VALUE,      SNMP_MAX_VALUE_SIZE,              "SNMP_VALUE")
-#endif /* LWIP_SNMP */
-#if LWIP_DNS && LWIP_SOCKET
-LWIP_MEMPOOL(NETDB,          MEMP_NUM_NETDB,           NETDB_ELEM_SIZE,               "NETDB")
-#endif /* LWIP_DNS && LWIP_SOCKET */
-#if LWIP_DNS && DNS_LOCAL_HOSTLIST && DNS_LOCAL_HOSTLIST_IS_DYNAMIC
-LWIP_MEMPOOL(LOCALHOSTLIST,  MEMP_NUM_LOCALHOSTLIST,   LOCALHOSTLIST_ELEM_SIZE,       "LOCALHOSTLIST")
-#endif /* LWIP_DNS && DNS_LOCAL_HOSTLIST && DNS_LOCAL_HOSTLIST_IS_DYNAMIC */
-#if PPP_SUPPORT && PPPOE_SUPPORT
-LWIP_MEMPOOL(PPPOE_IF,      MEMP_NUM_PPPOE_INTERFACES, sizeof(struct pppoe_softc),    "PPPOE_IF")
-#endif /* PPP_SUPPORT && PPPOE_SUPPORT */
+
 
 /*
- * A list of pools of pbuf's used by LWIP.
- *
- * LWIP_PBUF_MEMPOOL(pool_name, number_elements, pbuf_payload_size, pool_description)
- *     creates a pool name MEMP_pool_name. description is used in stats.c
- *     This allocates enough space for the pbuf struct and a payload.
- *     (Example: pbuf_payload_size=0 allocates only size for the struct)
+  LWIP使用的pbuf池列表.
+  LWIP_PBUF_MEMPOOL(pool_name，number_elements，pbuf_payload_size，pool_description)
+  创建一个池名称MEMP_pool_name. stats.c中使用了description.这为pbuf结构和有效负载分配了足够的空间.
+  (示例:pbuf_payload_size = 0仅为结构分配大小)
  */
 LWIP_PBUF_MEMPOOL(PBUF,      MEMP_NUM_PBUF,            0,                             "PBUF_REF/ROM")
 LWIP_PBUF_MEMPOOL(PBUF_POOL, PBUF_POOL_SIZE,           PBUF_POOL_BUFSIZE,             "PBUF_POOL")

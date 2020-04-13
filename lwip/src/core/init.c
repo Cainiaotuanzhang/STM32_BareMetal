@@ -283,9 +283,9 @@
 #endif /* !LWIP_DISABLE_TCP_SANITY_CHECKS */
 
 /**
- * Perform Sanity check of user-configurable values, and initialize all modules.
  * 对用户可配置的值执行完整性检查，然后初始化所有模块。
  */
+ //ZHENXIAOBO:从哪里进行的用户可配置值完整性检查.
 void lwip_init(void)
 {
     sys_init();     //ZHENXIAOBO:空函数,难道和平台有关吗?
