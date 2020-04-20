@@ -946,11 +946,10 @@
 #endif
 
 /**
- * TCP_MSS: TCP Maximum segment size. (default is 536, a conservative default,
- * you might want to increase this.)
- * For the receive side, this MSS is advertised to the remote side
- * when opening a connection. For the transmit size, this MSS sets
- * an upper limit on the MSS advertised by the remote host.
+ TCP_MSS:TCP最大段大小.
+ (默认值为536,保守的默认值，您可能需要增加此值.)
+ 对于接收方,此MSS在打开连接时被通告到远程方.
+ 对于发送大小,此MSS设置由远程主机发布的MSS的上限.
  */
 #ifndef TCP_MSS
 #define TCP_MSS                         536
@@ -1092,7 +1091,7 @@
  * Ethernet.
  */
 #ifndef PBUF_LINK_HLEN
-#define PBUF_LINK_HLEN                  (14 + ETH_PAD_SIZE)
+#define PBUF_LINK_HLEN                  (14 + ETH_PAD_SIZE) //ZHENXIAOBO: 关注下ETH_PAD_SIZE,可能涉及PHY+MAC
 #endif
 
 /**

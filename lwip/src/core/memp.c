@@ -177,6 +177,7 @@ void *memp_malloc(memp_t type)
 void memp_free(memp_t type, void *mem)
 {
     struct memp *memp;
+
     SYS_ARCH_DECL_PROTECT(old_level);
 
     if (mem == NULL)
@@ -188,9 +189,9 @@ void memp_free(memp_t type, void *mem)
 
     SYS_ARCH_PROTECT(old_level);
 
-    MEMP_STATS_DEC(used, type); 
+    MEMP_STATS_DEC(used, type);
 
-    memp->next = memp_tab[type]; 
+    memp->next = memp_tab[type];
     memp_tab[type] = memp;
 
     SYS_ARCH_UNPROTECT(old_level);

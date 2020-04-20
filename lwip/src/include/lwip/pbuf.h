@@ -79,36 +79,36 @@ typedef enum {
 #define PBUF_FLAG_TCP_FIN   0x20U
 
 struct pbuf {
-  /** next pbuf in singly linked pbuf chain */
-  struct pbuf *next;
+    /** next pbuf in singly linked pbuf chain */
+    struct pbuf *next;
 
-  /** pointer to the actual data in the buffer */
-  void *payload;
+    /** pointer to the actual data in the buffer */
+    void *payload;
 
-  /**
-   * total length of this buffer and all next buffers in chain
-   * belonging to the same packet.
-   *
-   * For non-queue packet chains this is the invariant:
-   * p->tot_len == p->len + (p->next? p->next->tot_len: 0)
-   */
-  u16_t tot_len;
+    /**
+    * total length of this buffer and all next buffers in chain
+    * belonging to the same packet.
+    *
+    * For non-queue packet chains this is the invariant:
+    * p->tot_len == p->len + (p->next? p->next->tot_len: 0)
+    */
+    u16_t tot_len;
 
-  /** length of this buffer */
-  u16_t len;
+    /** length of this buffer */
+    u16_t len;
 
-  /** pbuf_type as u8_t instead of enum to save space */
-  u8_t /*pbuf_type*/ type;
+    /** pbuf_type as u8_t instead of enum to save space */
+    u8_t /*pbuf_type*/ type;
 
-  /** misc flags */
-  u8_t flags;
+    /** misc flags */
+    u8_t flags;
 
-  /**
-   * the reference count always equals the number of pointers
-   * that refer to this pbuf. This can be pointers from an application,
-   * the stack itself, or pbuf->next pointers from a chain.
-   */
-  u16_t ref;
+    /**
+    引用计数始终等于引用此pbuf的指针的数量.
+    这可以是来自应用程序的指针,堆栈本身,
+    也可以是来自链的pbuf-> next指针.
+    */
+    u16_t ref;
 };
 
 #if LWIP_SUPPORT_CUSTOM_PBUF
