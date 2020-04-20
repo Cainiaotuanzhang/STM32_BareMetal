@@ -47,6 +47,8 @@ extern "C" {
 #define PBUF_TRANSPORT_HLEN 20
 #define PBUF_IP_HLEN        20
 
+//ZHENXIAOBO:对应TCP/IP 5层模型 (应用层)-传输层-网络层-数据链路层-物理层;
+//4层模型中,数据链路层和物理层合并为网络接口层.
 typedef enum {
   PBUF_TRANSPORT,
   PBUF_IP,

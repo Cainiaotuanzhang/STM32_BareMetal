@@ -39,6 +39,11 @@ s32_t my_lwip_init(void)
     netif_set_default(&lwip_netif); //设置默认网口
     netif_set_up(&lwip_netif);      //开启网口
 
+    app_tcp_init();
+
+    app_udp_init();
+
+
     return 0;
 }
 
