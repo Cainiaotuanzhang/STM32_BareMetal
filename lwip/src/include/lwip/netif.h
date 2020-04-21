@@ -94,19 +94,21 @@ extern "C" {
  * Set by the netif driver in its init function. */
 #define NETIF_FLAG_IGMP         0x80U
 
-/** Function prototype for netif init functions. Set up flags and output/linkoutput
- * callback functions in this function.
- *
+
+/** netif初始化函数的函数原型. 在此函数中设置标志和output / linkoutput回调函数.
  * @param netif The netif to initialize
  */
 typedef err_t (*netif_init_fn)(struct netif *netif);
-/** Function prototype for netif->input functions. This function is saved as 'input'
- * callback function in the netif struct. Call it when a packet has been received.
- *
+
+/** netif-> input函数的函数原型. 此函数在netif结构中另存为"输入"回调函数.
+    收到数据包后调用它.
  * @param p The received packet, copied into a pbuf
  * @param inp The netif which received the packet
  */
 typedef err_t (*netif_input_fn)(struct pbuf *p, struct netif *inp);
+
+
+
 /** Function prototype for netif->output functions. Called by lwIP when a packet
  * shall be sent. For ethernet netif, set this to 'etharp_output' and set
  * 'linkoutput'.

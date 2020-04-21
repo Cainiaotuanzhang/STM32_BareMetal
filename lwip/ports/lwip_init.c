@@ -32,7 +32,7 @@ s32_t my_lwip_init(void)
 
 
     lwip_init();    //lwip内核初始化
-    if (NULL == netif_add(&lwip_netif, &ip_addr, &net_mask, &gw_addr, NULL, NULL, NULL))    //ZHENXIAOBO:最后2个参数待补充.
+    if (NULL == netif_add(&lwip_netif, &ip_addr, &net_mask, &gw_addr, NULL, &ethernetif_init,&ethernet_input))
     {
         return -1;
     }

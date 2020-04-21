@@ -283,20 +283,20 @@
 #endif /* !LWIP_DISABLE_TCP_SANITY_CHECKS */
 
 /**
- * ���û������õ�ִֵ�������Լ�飬Ȼ���ʼ������ģ�顣
+ * 对用户可配置的值执行完整性检查,然后初始化所有模块.
  */
- //ZHENXIAOBO:��������е��û�������ֵ�����Լ��.
+ //ZHENXIAOBO:从哪里进行的用户可配置值完整性检查.
 void lwip_init(void)
 {
-    sys_init();     //ZHENXIAOBO:�պ���,�ѵ���ƽ̨�й���?
+    sys_init();     //ZHENXIAOBO:空函数,难道和平台有关吗?
     mem_init();
     memp_init();
 
-    /*****��ʱû�õ�,�Լ������Զ���.*****/
+    /*****暂时没用到,以及兼容性定义.*****/
     pbuf_init();
-    netif_init();
+    netif_init();   //ZHENXIAOBO:这边是netif的初始化,主要的工作是设置flag和output/linkoutput回调函数.
     ip_init();
-#if LWIP_ARP    //ZHENXIAOBO:���Ϊʲô�����к���,�ѵ����Ǳ������?
+#if LWIP_ARP        //ZHENXIAOBO:这个为什么可以有宏呢,难道不是必须的吗?
     etharp_init();
 #endif /* LWIP_ARP */
     raw_init();

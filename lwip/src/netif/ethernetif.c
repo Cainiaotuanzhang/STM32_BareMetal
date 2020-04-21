@@ -45,8 +45,6 @@
 
 #include "lwip/opt.h"
 
-#if 0 /* don't build, this is only a skeleton, see previous comment */
-
 #include "lwip/def.h"
 #include "lwip/mem.h"
 #include "lwip/pbuf.h"
@@ -56,8 +54,8 @@
 #include "netif/ppp_oe.h"
 
 /* Define those to better describe your network interface. */
-#define IFNAME0 'e'
-#define IFNAME1 'n'
+#define IFNAME0 'Z'
+#define IFNAME1 'H'
 
 /**
  * Helper struct to hold private data used to operate your ethernet interface.
@@ -260,58 +258,44 @@ ethernetif_input(struct netif *netif)
 }
 
 /**
- * Should be called at the beginning of the program to set up the
- * network interface. It calls the function low_level_init() to do the
- * actual setup of the hardware.
- *
- * This function should be passed as a parameter to netif_add().
+ * 应该在程序开始时调用以设置网络接口.它调用函数low_level_init()进行硬件的实际设置.
+ * 该函数应作为参数传递给netif_add().
  *
  * @param netif the lwip network interface structure for this ethernetif
  * @return ERR_OK if the loopif is initialized
  *         ERR_MEM if private data couldn't be allocated
  *         any other err_t on error
  */
-err_t
-ethernetif_init(struct netif *netif)
+err_t ethernetif_init(struct netif *netif)
 {
-  struct ethernetif *ethernetif;
+    struct ethernetif *ethernetif;
 
-  LWIP_ASSERT("netif != NULL", (netif != NULL));
-    
-  ethernetif = mem_malloc(sizeof(struct ethernetif));
-  if (ethernetif == NULL) {
-    LWIP_DEBUGF(NETIF_DEBUG, ("ethernetif_init: out of memory\n"));
-    return ERR_MEM;
-  }
+    ethernetif = mem_malloc(sizeof(struct ethernetif));
+    if (ethernetif == NULL)
+    {
+        return ERR_MEM;
+    }
 
 #if LWIP_NETIF_HOSTNAME
-  /* Initialize interface hostname */
-  netif->hostname = "lwip";
+    /* Initialize interface hostname */
+    netif->hostname = "lwip";
 #endif /* LWIP_NETIF_HOSTNAME */
 
-  /*
-   * Initialize the snmp variables and counters inside the struct netif.
-   * The last argument should be replaced with your link speed, in units
-   * of bits per second.
-   */
-  NETIF_INIT_SNMP(netif, snmp_ifType_ethernet_csmacd, LINK_SPEED_OF_YOUR_NETIF_IN_BPS);
+    netif->state = ethernetif;
+    netif->name[0] = IFNAME0;
+    netif->name[1] = IFNAME1;
+    
+    /* 我们直接在此处使用etharp_output()保存函数调用,
+    如果必须在发送之前进行一些检查(例如,如果链接可用...),
+    则可以从其中声明自己的函数调用etharp_output(). */
+    netif->output = etharp_output;          //ZHENXIAOBO:IP层发送数据包函数
+    netif->linkoutput = low_level_output;   //ARP模块发送数据包函数
 
-  netif->state = ethernetif;
-  netif->name[0] = IFNAME0;
-  netif->name[1] = IFNAME1;
-  /* We directly use etharp_output() here to save a function call.
-   * You can instead declare your own function an call etharp_output()
-   * from it if you have to do some checks before sending (e.g. if link
-   * is available...) */
-  netif->output = etharp_output;
-  netif->linkoutput = low_level_output;
-  
-  ethernetif->ethaddr = (struct eth_addr *)&(netif->hwaddr[0]);
-  
-  /* initialize the hardware */
-  low_level_init(netif);
+    ethernetif->ethaddr = (struct eth_addr *)&(netif->hwaddr[0]);
 
-  return ERR_OK;
+    /* initialize the hardware */
+    low_level_init(netif);
+
+    return ERR_OK;
 }
 
-#endif /* 0 */
