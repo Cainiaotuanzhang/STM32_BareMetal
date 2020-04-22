@@ -34,9 +34,7 @@
 #include "lwip/ip_addr.h"
 #include "lwip/inet.h"
 
-u8_t
-ip_addr_netcmp(struct ip_addr *addr1, struct ip_addr *addr2,
-                struct ip_addr *mask)
+u8_t ip_addr_netcmp(struct ip_addr *addr1, struct ip_addr *addr2, struct ip_addr *mask)
 {
   return((addr1->addr[0] & mask->addr[0]) == (addr2->addr[0] & mask->addr[0]) &&
          (addr1->addr[1] & mask->addr[1]) == (addr2->addr[1] & mask->addr[1]) &&

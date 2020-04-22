@@ -268,30 +268,19 @@ ethernetif_input(struct netif *netif)
  */
 err_t ethernetif_init(struct netif *netif)
 {
-    struct ethernetif *ethernetif;
-
-    ethernetif = mem_malloc(sizeof(struct ethernetif));
-    if (ethernetif == NULL)
-    {
-        return ERR_MEM;
-    }
-
 #if LWIP_NETIF_HOSTNAME
     /* Initialize interface hostname */
     netif->hostname = "lwip";
 #endif /* LWIP_NETIF_HOSTNAME */
 
-    netif->state = ethernetif;
     netif->name[0] = IFNAME0;
     netif->name[1] = IFNAME1;
-    
+
     /* 我们直接在此处使用etharp_output()保存函数调用,
     如果必须在发送之前进行一些检查(例如,如果链接可用...),
     则可以从其中声明自己的函数调用etharp_output(). */
     netif->output = etharp_output;          //ZHENXIAOBO:IP层发送数据包函数
-    netif->linkoutput = low_level_output;   //ARP模块发送数据包函数
-
-    ethernetif->ethaddr = (struct eth_addr *)&(netif->hwaddr[0]);
+    netif->linkoutput = low_level_output;   //ZHENXIAOBO:发送ETH包,ARP层调用.
 
     /* initialize the hardware */
     low_level_init(netif);

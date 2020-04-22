@@ -73,8 +73,7 @@ PACK_STRUCT_END
                                                (ipaddr)->addr[2] = htonl(((e & 0xffff) << 16) | (f & 0xffff)); \
                                                (ipaddr)->addr[3] = htonl(((g & 0xffff) << 16) | (h & 0xffff)); } while(0)
 
-u8_t ip_addr_netcmp(struct ip_addr *addr1, struct ip_addr *addr2,
-        struct ip_addr *mask);
+u8_t ip_addr_netcmp(struct ip_addr *addr1, struct ip_addr *addr2, struct ip_addr *mask);
 u8_t ip_addr_cmp(struct ip_addr *addr1, struct ip_addr *addr2);
 void ip_addr_set(struct ip_addr *dest, struct ip_addr *src);
 u8_t ip_addr_isany(struct ip_addr *addr);

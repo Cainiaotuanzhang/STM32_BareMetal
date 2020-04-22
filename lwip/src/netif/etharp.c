@@ -875,108 +875,85 @@ etharp_output_to_arp_index(struct netif *netif, struct pbuf *q, u8_t arp_idx)
  * - ERR_RTE No route to destination (no gateway to external networks),
  * or the return type of either etharp_query() or etharp_send_ip().
  */
-err_t
-etharp_output(struct netif *netif, struct pbuf *q, ip_addr_t *ipaddr)
+err_t etharp_output(struct netif *netif, struct pbuf *q, ip_addr_t *ipaddr)
 {
-  struct eth_addr *dest;
-  struct eth_addr mcastaddr;
-  ip_addr_t *dst_addr = ipaddr;
+    struct eth_addr *dest;
+    struct eth_addr mcastaddr;
+    ip_addr_t *dst_addr = ipaddr;
 
-  LWIP_ASSERT("netif != NULL", netif != NULL);
-  LWIP_ASSERT("q != NULL", q != NULL);
-  LWIP_ASSERT("ipaddr != NULL", ipaddr != NULL);
-
-  /* make room for Ethernet header - should not fail */
-  if (pbuf_header(q, sizeof(struct eth_hdr)) != 0) {
-    /* bail out */
-    LWIP_DEBUGF(ETHARP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_SERIOUS,
-      ("etharp_output: could not allocate room for header.\n"));
-    LINK_STATS_INC(link.lenerr);
-    return ERR_BUF;
-  }
-
-  /* Determine on destination hardware address. Broadcasts and multicasts
-   * are special, other IP addresses are looked up in the ARP table. */
-
-  /* broadcast destination IP address? */
-  if (ip_addr_isbroadcast(ipaddr, netif)) {
-    /* broadcast on Ethernet also */
-    dest = (struct eth_addr *)&ethbroadcast;
-  /* multicast destination IP address? */
-  } else if (ip_addr_ismulticast(ipaddr)) {
-    /* Hash IP multicast address to MAC address.*/
-    mcastaddr.addr[0] = LL_MULTICAST_ADDR_0;
-    mcastaddr.addr[1] = LL_MULTICAST_ADDR_1;
-    mcastaddr.addr[2] = LL_MULTICAST_ADDR_2;
-    mcastaddr.addr[3] = ip4_addr2(ipaddr) & 0x7f;
-    mcastaddr.addr[4] = ip4_addr3(ipaddr);
-    mcastaddr.addr[5] = ip4_addr4(ipaddr);
-    /* destination Ethernet address is multicast */
-    dest = &mcastaddr;
-  /* unicast destination IP address? */
-  } else {
-    s8_t i;
-    /* outside local network? if so, this can neither be a global broadcast nor
-       a subnet broadcast. */
-    if (!ip_addr_netcmp(ipaddr, &(netif->ip_addr), &(netif->netmask)) &&
-        !ip_addr_islinklocal(ipaddr)) {
-#if LWIP_AUTOIP
-      struct ip_hdr *iphdr = (struct ip_hdr*)((u8_t*)q->payload +
-        sizeof(struct eth_hdr));
-      /* According to RFC 3297, chapter 2.6.2 (Forwarding Rules), a packet with
-         a link-local source address must always be "directly to its destination
-         on the same physical link. The host MUST NOT send the packet to any
-         router for forwarding". */
-      if (!ip_addr_islinklocal(&iphdr->src))
-#endif /* LWIP_AUTOIP */
-      {
-        /* interface has default gateway? */
-        if (!ip_addr_isany(&netif->gw)) {
-          /* send to hardware address of default gateway IP address */
-          dst_addr = &(netif->gw);
-        /* no default gateway available */
-        } else {
-          /* no route to destination error (default gateway missing) */
-          return ERR_RTE;
-        }
-      }
+    /* make room for Ethernet header - should not fail */
+    if (pbuf_header(q, sizeof(struct eth_hdr)) != 0)
+    {
+        return ERR_BUF;
     }
-#if LWIP_NETIF_HWADDRHINT
-    if (netif->addr_hint != NULL) {
-      /* per-pcb cached entry was given */
-      u8_t etharp_cached_entry = *(netif->addr_hint);
-      if (etharp_cached_entry < ARP_TABLE_SIZE) {
-#endif /* LWIP_NETIF_HWADDRHINT */
+
+    /* 确定目标硬件地址. 广播和多播是特殊的,其他IP地址在ARP表中查找. */
+    if (ip_addr_isbroadcast(ipaddr, netif))
+    {
+        dest = (struct eth_addr *)&ethbroadcast;
+    }
+    else if (ip_addr_ismulticast(ipaddr))
+    {
+        /* Hash IP multicast address to MAC address.*/
+        mcastaddr.addr[0] = LL_MULTICAST_ADDR_0;
+        mcastaddr.addr[1] = LL_MULTICAST_ADDR_1;
+        mcastaddr.addr[2] = LL_MULTICAST_ADDR_2;
+        mcastaddr.addr[3] = ip4_addr2(ipaddr) & 0x7f;
+        mcastaddr.addr[4] = ip4_addr3(ipaddr);
+        mcastaddr.addr[5] = ip4_addr4(ipaddr);
+        dest = &mcastaddr;
+    }
+    else
+    {
+        s8_t i;
+        /* 在本地网络之外? 如果是这样,则既不能是全局广播,也不能是子网广播 */
+        if (!ip_addr_netcmp(ipaddr, &(netif->ip_addr), &(netif->netmask)) &&
+            !ip_addr_islinklocal(ipaddr))
+        {
+            /* interface has default gateway? */
+            if (!ip_addr_isany(&netif->gw))
+            {
+                /* send to hardware address of default gateway IP address */
+                dst_addr = &(netif->gw);
+            }
+            else
+            {
+                /* no route to destination error (default gateway missing) */
+                return ERR_RTE;
+            }
+        }
+
+#if 1   //ZHENXIAOBO:待分析.
         if ((arp_table[etharp_cached_entry].state >= ETHARP_STATE_STABLE) &&
-            (ip_addr_cmp(dst_addr, &arp_table[etharp_cached_entry].ipaddr))) {
-          /* the per-pcb-cached entry is stable and the right one! */
-          ETHARP_STATS_INC(etharp.cachehit);
-          return etharp_output_to_arp_index(netif, q, etharp_cached_entry);
+            (ip_addr_cmp(dst_addr, &arp_table[etharp_cached_entry].ipaddr)))
+        {
+            /* 每pcb缓存的条目稳定且正确! */
+            return etharp_output_to_arp_index(netif, q, etharp_cached_entry);
         }
-#if LWIP_NETIF_HWADDRHINT
-      }
-    }
-#endif /* LWIP_NETIF_HWADDRHINT */
 
-    /* find stable entry: do this here since this is a critical path for
-       throughput and etharp_find_entry() is kind of slow */
-    for (i = 0; i < ARP_TABLE_SIZE; i++) {
-      if ((arp_table[i].state >= ETHARP_STATE_STABLE) &&
-          (ip_addr_cmp(dst_addr, &arp_table[i].ipaddr))) {
-        /* found an existing, stable entry */
-        ETHARP_SET_HINT(netif, i);
-        return etharp_output_to_arp_index(netif, q, i);
-      }
-    }
-    /* no stable entry found, use the (slower) query function:
-       queue on destination Ethernet address belonging to ipaddr */
-    return etharp_query(netif, dst_addr, q);
-  }
+        /* find stable entry: do this here since this is a critical path for
+        throughput and etharp_find_entry() is kind of slow */
+        for (i = 0; i < ARP_TABLE_SIZE; i++)
+        {
+            if ((arp_table[i].state >= ETHARP_STATE_STABLE) &&
+                (ip_addr_cmp(dst_addr, &arp_table[i].ipaddr)))
+            {
+                /* found an existing, stable entry */
+                ETHARP_SET_HINT(netif, i);
+                return etharp_output_to_arp_index(netif, q, i);
+            }
+        }
 
-  /* continuation for multicast/broadcast destinations */
-  /* obtain source Ethernet address of the given interface */
-  /* send packet directly on the link */
-  return etharp_send_ip(netif, q, (struct eth_addr*)(netif->hwaddr), dest);
+        /* no stable entry found, use the (slower) query function:
+        queue on destination Ethernet address belonging to ipaddr */
+        return etharp_query(netif, dst_addr, q);
+#endif
+    }
+
+    /* 多播/广播目的地的延续 */
+    /* 获取给定接口的源以太网地址 */
+    /* 直接在链接上发送数据包 */
+    return etharp_send_ip(netif, q, (struct eth_addr*)(netif->hwaddr), dest);
 }
 
 /**
