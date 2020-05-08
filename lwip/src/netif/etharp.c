@@ -1242,49 +1242,35 @@ etharp_request(struct netif *netif, ip_addr_t *ipaddr)
 }
 #endif /* LWIP_ARP */
 
-/**
- * Process received ethernet frames. Using this function instead of directly
- * calling ip_input and passing ARP frames through etharp in ethernetif_input,
- * the ARP cache is protected from concurrent access.
- *
- * @param p the recevied packet, p->payload pointing to the ethernet header
- * @param netif the network interface on which the packet was received
+/** 使用此功能代替直接调用ip_input并通过ethernetif_input中的etharp传递ARP帧,可以保护ARP缓存免受并发访问.
+    @param p接收到的数据包,p-> payload指向以太网头
+    @param netif在其上接收到数据包的网络接口
  */
-err_t
-ethernet_input(struct pbuf *p, struct netif *netif)
+err_t ethernet_input(struct pbuf *p, struct netif *netif)
 {
-  struct eth_hdr* ethhdr;
-  u16_t type;
-#if LWIP_ARP || ETHARP_SUPPORT_VLAN
-  s16_t ip_hdr_offset = SIZEOF_ETH_HDR;
-#endif /* LWIP_ARP || ETHARP_SUPPORT_VLAN */
+    struct eth_hdr* ethhdr;
+    u16_t type;
+    s16_t ip_hdr_offset = SIZEOF_ETH_HDR;
 
-  if (p->len <= SIZEOF_ETH_HDR) {
-    /* a packet with only an ethernet header (or less) is not valid for us */
+    if (p->len <= SIZEOF_ETH_HDR)
+    {
+        /* 仅具有以太网头(或更少)的数据包对我们无效 */
+        goto free_and_return;
+    }
+
+    /* 指向以以太网报头开头的数据包有效数据 */
+    ethhdr = (struct eth_hdr *)p->payload;
+
+    type = ethhdr->type;
+
+#if ETHARP_SUPPORT_VLAN
+    if (type == PP_HTONS(ETHTYPE_VLAN)) {
+    struct eth_vlan_hdr *vlan = (struct eth_vlan_hdr*)(((char*)ethhdr) + SIZEOF_ETH_HDR);
+    if (p->len <= SIZEOF_ETH_HDR + SIZEOF_VLAN_HDR) {
+    /* a packet with only an ethernet/vlan header (or less) is not valid for us */
     ETHARP_STATS_INC(etharp.proterr);
     ETHARP_STATS_INC(etharp.drop);
     goto free_and_return;
-  }
-
-  /* points to packet payload, which starts with an Ethernet header */
-  ethhdr = (struct eth_hdr *)p->payload;
-  LWIP_DEBUGF(ETHARP_DEBUG | LWIP_DBG_TRACE,
-    ("ethernet_input: dest:%"X8_F":%"X8_F":%"X8_F":%"X8_F":%"X8_F":%"X8_F", src:%"X8_F":%"X8_F":%"X8_F":%"X8_F":%"X8_F":%"X8_F", type:%"X16_F"\n",
-     (unsigned)ethhdr->dest.addr[0], (unsigned)ethhdr->dest.addr[1], (unsigned)ethhdr->dest.addr[2],
-     (unsigned)ethhdr->dest.addr[3], (unsigned)ethhdr->dest.addr[4], (unsigned)ethhdr->dest.addr[5],
-     (unsigned)ethhdr->src.addr[0], (unsigned)ethhdr->src.addr[1], (unsigned)ethhdr->src.addr[2],
-     (unsigned)ethhdr->src.addr[3], (unsigned)ethhdr->src.addr[4], (unsigned)ethhdr->src.addr[5],
-     (unsigned)htons(ethhdr->type)));
-
-  type = ethhdr->type;
-#if ETHARP_SUPPORT_VLAN
-  if (type == PP_HTONS(ETHTYPE_VLAN)) {
-    struct eth_vlan_hdr *vlan = (struct eth_vlan_hdr*)(((char*)ethhdr) + SIZEOF_ETH_HDR);
-    if (p->len <= SIZEOF_ETH_HDR + SIZEOF_VLAN_HDR) {
-      /* a packet with only an ethernet/vlan header (or less) is not valid for us */
-      ETHARP_STATS_INC(etharp.proterr);
-      ETHARP_STATS_INC(etharp.drop);
-      goto free_and_return;
     }
 #if defined(ETHARP_VLAN_CHECK) || defined(ETHARP_VLAN_CHECK_FN) /* if not, allow all VLANs */
 #ifdef ETHARP_VLAN_CHECK_FN
@@ -1292,85 +1278,85 @@ ethernet_input(struct pbuf *p, struct netif *netif)
 #elif defined(ETHARP_VLAN_CHECK)
     if (VLAN_ID(vlan) != ETHARP_VLAN_CHECK) {
 #endif
-      /* silently ignore this packet: not for our VLAN */
-      pbuf_free(p);
-      return ERR_OK;
+    /* silently ignore this packet: not for our VLAN */
+    pbuf_free(p);
+    return ERR_OK;
     }
 #endif /* defined(ETHARP_VLAN_CHECK) || defined(ETHARP_VLAN_CHECK_FN) */
     type = vlan->tpid;
     ip_hdr_offset = SIZEOF_ETH_HDR + SIZEOF_VLAN_HDR;
-  }
+    }
 #endif /* ETHARP_SUPPORT_VLAN */
 
 #if LWIP_ARP_FILTER_NETIF
-  netif = LWIP_ARP_FILTER_NETIF_FN(p, netif, htons(type));
+    netif = LWIP_ARP_FILTER_NETIF_FN(p, netif, htons(type));
 #endif /* LWIP_ARP_FILTER_NETIF*/
 
-  if (ethhdr->dest.addr[0] & 1) {
+    if (ethhdr->dest.addr[0] & 1) {
     /* this might be a multicast or broadcast packet */
     if (ethhdr->dest.addr[0] == LL_MULTICAST_ADDR_0) {
-      if ((ethhdr->dest.addr[1] == LL_MULTICAST_ADDR_1) &&
-          (ethhdr->dest.addr[2] == LL_MULTICAST_ADDR_2)) {
-        /* mark the pbuf as link-layer multicast */
-        p->flags |= PBUF_FLAG_LLMCAST;
-      }
-    } else if (eth_addr_cmp(&ethhdr->dest, &ethbroadcast)) {
-      /* mark the pbuf as link-layer broadcast */
-      p->flags |= PBUF_FLAG_LLBCAST;
+    if ((ethhdr->dest.addr[1] == LL_MULTICAST_ADDR_1) &&
+    (ethhdr->dest.addr[2] == LL_MULTICAST_ADDR_2)) {
+    /* mark the pbuf as link-layer multicast */
+    p->flags |= PBUF_FLAG_LLMCAST;
     }
-  }
+    } else if (eth_addr_cmp(&ethhdr->dest, &ethbroadcast)) {
+    /* mark the pbuf as link-layer broadcast */
+    p->flags |= PBUF_FLAG_LLBCAST;
+    }
+    }
 
-  switch (type) {
+    switch (type) {
 #if LWIP_ARP
     /* IP packet? */
     case PP_HTONS(ETHTYPE_IP):
-      if (!(netif->flags & NETIF_FLAG_ETHARP)) {
-        goto free_and_return;
-      }
+    if (!(netif->flags & NETIF_FLAG_ETHARP)) {
+    goto free_and_return;
+    }
 #if ETHARP_TRUST_IP_MAC
-      /* update ARP table */
-      etharp_ip_input(netif, p);
+    /* update ARP table */
+    etharp_ip_input(netif, p);
 #endif /* ETHARP_TRUST_IP_MAC */
-      /* skip Ethernet header */
-      if(pbuf_header(p, -ip_hdr_offset)) {
-        LWIP_ASSERT("Can't move over header in packet", 0);
-        goto free_and_return;
-      } else {
-        /* pass to IP layer */
-        ip_input(p, netif);
-      }
-      break;
-      
+    /* skip Ethernet header */
+    if(pbuf_header(p, -ip_hdr_offset)) {
+    LWIP_ASSERT("Can't move over header in packet", 0);
+    goto free_and_return;
+    } else {
+    /* pass to IP layer */
+    ip_input(p, netif);
+    }
+    break;
+
     case PP_HTONS(ETHTYPE_ARP):
-      if (!(netif->flags & NETIF_FLAG_ETHARP)) {
-        goto free_and_return;
-      }
-      /* pass p to ARP module */
-      etharp_arp_input(netif, (struct eth_addr*)(netif->hwaddr), p);
-      break;
+    if (!(netif->flags & NETIF_FLAG_ETHARP)) {
+    goto free_and_return;
+    }
+    /* pass p to ARP module */
+    etharp_arp_input(netif, (struct eth_addr*)(netif->hwaddr), p);
+    break;
 #endif /* LWIP_ARP */
 #if PPPOE_SUPPORT
     case PP_HTONS(ETHTYPE_PPPOEDISC): /* PPP Over Ethernet Discovery Stage */
-      pppoe_disc_input(netif, p);
-      break;
+    pppoe_disc_input(netif, p);
+    break;
 
     case PP_HTONS(ETHTYPE_PPPOE): /* PPP Over Ethernet Session Stage */
-      pppoe_data_input(netif, p);
-      break;
+    pppoe_data_input(netif, p);
+    break;
 #endif /* PPPOE_SUPPORT */
 
     default:
-      ETHARP_STATS_INC(etharp.proterr);
-      ETHARP_STATS_INC(etharp.drop);
-      goto free_and_return;
-  }
+    ETHARP_STATS_INC(etharp.proterr);
+    ETHARP_STATS_INC(etharp.drop);
+    goto free_and_return;
+    }
 
-  /* This means the pbuf is freed or consumed,
-     so the caller doesn't have to free it again */
-  return ERR_OK;
+    /* This means the pbuf is freed or consumed,
+    so the caller doesn't have to free it again */
+    return ERR_OK;
 
-free_and_return:
-  pbuf_free(p);
-  return ERR_OK;
+    free_and_return:
+    pbuf_free(p);
+    return ERR_OK;
 }
 #endif /* LWIP_ARP || LWIP_ETHERNET */

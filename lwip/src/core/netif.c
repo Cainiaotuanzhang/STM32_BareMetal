@@ -120,77 +120,37 @@ void netif_init(void)
  *
  * @return netif, or NULL if failed.
  */
-struct netif *
-netif_add(struct netif *netif, ip_addr_t *ipaddr, ip_addr_t *netmask,
-  ip_addr_t *gw, void *state, netif_init_fn init, netif_input_fn input)
+struct netif *netif_add(struct netif *netif, ip_addr_t *ipaddr, ip_addr_t *netmask,
+                        ip_addr_t *gw, void *state, netif_init_fn init, netif_input_fn input)
 {
 
-  LWIP_ASSERT("No init function given", init != NULL);
+    /* reset new interface configuration state */
+    ip_addr_set_zero(&netif->ip_addr);
+    ip_addr_set_zero(&netif->netmask);
+    ip_addr_set_zero(&netif->gw);
 
-  /* reset new interface configuration state */
-  ip_addr_set_zero(&netif->ip_addr);
-  ip_addr_set_zero(&netif->netmask);
-  ip_addr_set_zero(&netif->gw);
-  netif->flags = 0;
-#if LWIP_DHCP
-  /* netif not under DHCP control by default */
-  netif->dhcp = NULL;
-#endif /* LWIP_DHCP */
-#if LWIP_AUTOIP
-  /* netif not under AutoIP control by default */
-  netif->autoip = NULL;
-#endif /* LWIP_AUTOIP */
-#if LWIP_NETIF_STATUS_CALLBACK
-  netif->status_callback = NULL;
-#endif /* LWIP_NETIF_STATUS_CALLBACK */
-#if LWIP_NETIF_LINK_CALLBACK
-  netif->link_callback = NULL;
-#endif /* LWIP_NETIF_LINK_CALLBACK */
-#if LWIP_IGMP
-  netif->igmp_mac_filter = NULL;
-#endif /* LWIP_IGMP */
-#if ENABLE_LOOPBACK
-  netif->loop_first = NULL;
-  netif->loop_last = NULL;
-#endif /* ENABLE_LOOPBACK */
+    netif->flags = 0;
 
-  /* remember netif specific state information data */
-  netif->state = state;
-  netif->num = netif_num++;
-  netif->input = input;
-  NETIF_SET_HWADDRHINT(netif, NULL);
-#if ENABLE_LOOPBACK && LWIP_LOOPBACK_MAX_PBUFS
-  netif->loop_cnt_current = 0;
-#endif /* ENABLE_LOOPBACK && LWIP_LOOPBACK_MAX_PBUFS */
+    /* 记住netif特定状态信息数据 */
+    netif->state = state;
+    netif->num = netif_num++;
+    netif->input = input;
+    NETIF_SET_HWADDRHINT(netif, NULL);
 
-  netif_set_addr(netif, ipaddr, netmask, gw);
+    netif_set_addr(netif, ipaddr, netmask, gw);
 
-  /* call user specified initialization function for netif */
-  if (init(netif) != ERR_OK) {
-    return NULL;
-  }
+    /* 调用用户指定的netif初始化函数 */
+    if (init(netif) != ERR_OK)
+    {
+        return NULL;
+    }
 
-  /* add this netif to the list */
-  netif->next = netif_list;
-  netif_list = netif;
-  snmp_inc_iflist();
+    /* add this netif to the list */
+    netif->next = netif_list;
+    netif_list = netif;
+    snmp_inc_iflist();
 
-#if LWIP_IGMP
-  /* start IGMP processing */
-  if (netif->flags & NETIF_FLAG_IGMP) {
-    igmp_start(netif);
-  }
-#endif /* LWIP_IGMP */
-
-  LWIP_DEBUGF(NETIF_DEBUG, ("netif: added interface %c%c IP addr ",
-    netif->name[0], netif->name[1]));
-  ip_addr_debug_print(NETIF_DEBUG, ipaddr);
-  LWIP_DEBUGF(NETIF_DEBUG, (" netmask "));
-  ip_addr_debug_print(NETIF_DEBUG, netmask);
-  LWIP_DEBUGF(NETIF_DEBUG, (" gw "));
-  ip_addr_debug_print(NETIF_DEBUG, gw);
-  LWIP_DEBUGF(NETIF_DEBUG, ("\n"));
-  return netif;
+    return netif;
 }
 
 /**
