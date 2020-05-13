@@ -46,11 +46,12 @@
   */
 
 /** 
-  * @brief  ETH MAC Init structure definition
-  * @note   The user should not configure all the ETH_InitTypeDef structure's fields. 
-  *   By calling the ETH_StructInit function the structure�s fields are set to their default values.
-  *   Only the parameters that will be set to a non-default value should be configured.  
-  */ 
+  @brief ETH MAC初始化结构定义
+  @注意
+  用户不应配置所有ETH_InitTypeDef结构的字段.
+  通过调用ETH_StructInit函数,将结构的字段设置为其默认值.
+  仅应配置将设置为非默认值的参数.
+  */
 typedef struct {
 /** 
   * @brief / * MAC  

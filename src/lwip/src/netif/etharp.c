@@ -1249,19 +1249,16 @@ etharp_request(struct netif *netif, ip_addr_t *ipaddr)
 err_t ethernet_input(struct pbuf *p, struct netif *netif)
 {
     struct eth_hdr *ethhdr;
-    u16_t type;
     s16_t ip_hdr_offset = SIZEOF_ETH_HDR;
 
     if (p->len <= SIZEOF_ETH_HDR)
     {
-        /* 仅具有以太网头(或更少)的数据包对我们无效 */
+        /* 仅具有以太网头(或更少)的数据包无效 */
         goto free_and_return;
     }
 
     /* 指向以以太网报头开头的数据包有效数据 */
     ethhdr = (struct eth_hdr *)p->payload;
-
-    type = ethhdr->type;
 
     if (ethhdr->dest.addr[0] & 1)
     {
@@ -1282,7 +1279,7 @@ err_t ethernet_input(struct pbuf *p, struct netif *netif)
         }
     }
 
-    switch (type)
+    switch (ethhdr->type)
     {
         /* IP packet? */
         case PP_HTONS(ETHTYPE_IP):
@@ -1290,19 +1287,20 @@ err_t ethernet_input(struct pbuf *p, struct netif *netif)
             {
                 goto free_and_return;
             }
+
 #if ETHARP_TRUST_IP_MAC
             /* update ARP table */
             etharp_ip_input(netif, p);
 #endif /* ETHARP_TRUST_IP_MAC */
-            /* skip Ethernet header */
+
+            /* 跳过以太网报头 */
             if (pbuf_header(p, -ip_hdr_offset))
             {
-                LWIP_ASSERT("Can't move over header in packet", 0);
                 goto free_and_return;
             }
             else
             {
-                /* pass to IP layer */
+                /* 传输到IP层 */
                 ip_input(p, netif);
             }
             break;
@@ -1329,3 +1327,4 @@ free_and_return:
     return ERR_OK;
 }
 #endif /* LWIP_ARP || LWIP_ETHERNET */
+

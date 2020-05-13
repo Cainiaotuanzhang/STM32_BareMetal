@@ -4,6 +4,12 @@
 
 struct netif lwip_netif;    //定义一个全局的网络接口
 
+void lwip_pkt_handle(void);
+{
+    //从网络缓冲区中读取接收到的数据包并将其发送给LWIP处理
+    ethernetif_input(&lwip_netif);
+}
+
 s32_t my_lwip_init(void)
 {
     u8_t buff[4];
@@ -11,7 +17,7 @@ s32_t my_lwip_init(void)
     struct ip_addr net_mask;
     struct ip_addr gw_addr;
 
-    if (0 != LAN8720_Init())
+    if (1 != LAN8720_Init())
     {
         return -1;
     }

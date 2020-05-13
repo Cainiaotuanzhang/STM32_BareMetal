@@ -445,14 +445,15 @@
 #endif
 
 /**
- * ETHARP_TRUST_IP_MAC==1: Incoming IP packets cause the ARP table to be
- * updated with the source MAC and IP addresses supplied in the packet.
- * You may want to disable this if you do not trust LAN peers to have the
- * correct addresses, or as a limited approach to attempt to handle
- * spoofing. If disabled, lwIP will need to make a new ARP request if
- * the peer is not already in the ARP table, adding a little latency.
- * The peer *is* in the ARP table if it requested our address before.
- * Also notice that this slows down input processing of every IP packet!
+ ETHARP_TRUST_IP_MAC == 1:
+ 传入的IP数据包导致ARP表被数据包中提供的源MAC和IP地址更新.
+ 
+ 如果您不信任LAN对等体具有正确的地址,或者作为尝试处理欺骗的一种有限方法,则可能要禁用此功能.
+ 
+ 如果禁用,如果对等点尚未在ARP表中,则lwIP将需要发出新的ARP请求,这会增加一点延迟.
+ 
+ 如果对方以前曾要求我们提供地址,则它在ARP表中.
+ 另请注意,这会减慢每个IP数据包的输入处理速度!
  */
 #ifndef ETHARP_TRUST_IP_MAC
 #define ETHARP_TRUST_IP_MAC             0

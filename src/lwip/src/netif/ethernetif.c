@@ -176,106 +176,73 @@ low_level_output(struct netif *netif, struct pbuf *p)
  * @return a pbuf filled with the received packet (including MAC header)
  *         NULL on memory error
  */
-static struct pbuf *
-low_level_input(struct netif *netif)
+static struct pbuf *low_level_input(struct netif *netif)
 {
-  struct ethernetif *ethernetif = netif->state;
-  struct pbuf *p, *q;
-  u16_t len;
+    struct pbuf *p, *q;
+    u16_t len;
+    u32_t i = 0;
+    FrameTypeDef frame;
 
-  /* Obtain the size of the packet and put it into the "len"
-     variable. */
-  len = ;
+    frame = ETH_Rx_Packet();
+    len = frame.length;
 
-#if ETH_PAD_SIZE
-  len += ETH_PAD_SIZE; /* allow room for Ethernet padding */
-#endif
-
-  /* We allocate a pbuf chain of pbufs from the pool. */
-  p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
-  
-  if (p != NULL) {
-
-#if ETH_PAD_SIZE
-    pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
-#endif
-
-    /* We iterate over the pbuf chain until we have read the entire
-     * packet into the pbuf. */
-    for(q = p; q != NULL; q = q->next) {
-      /* Read enough bytes to fill this pbuf in the chain. The
-       * available data in the pbuf is given by the q->len
-       * variable.
-       * This does not necessarily have to be a memcpy, you can also preallocate
-       * pbufs for a DMA-enabled MAC and after receiving truncate it to the
-       * actually received size. In this case, ensure the tot_len member of the
-       * pbuf is the sum of the chained pbuf len members.
-       */
-      read data into(q->payload, q->len);
+    p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
+    if (p != NULL)
+    {
+        for (q = p; q != NULL; q = q->next)
+        {
+            memcpy((u8_t *)q->payload, (u8_t *)frame.buffer+i, q->len);
+            i += q->len;
+        }
     }
-    acknowledge that packet has been read();
 
-#if ETH_PAD_SIZE
-    pbuf_header(p, ETH_PAD_SIZE); /* reclaim the padding word */
-#endif
-
-    LINK_STATS_INC(link.recv);
-  } else {
-    drop packet();
-    LINK_STATS_INC(link.memerr);
-    LINK_STATS_INC(link.drop);
-  }
-
-  return p;  
+    frame.descriptor->Status = ETH_DMARxDesc_OWN;   //设置Rx描述符OWN位,buffer重归DMA
+    if ((ETH->DMASR & ETH_DMASR_RBUS) != (u32)RESET)
+    {
+        ETH->DMASR = ETH_DMASR_RBUS;    //重置DMA RBUS位
+        ETH->DMARPDR = 0;               //恢复DMA接收
+    }
+    return p;
 }
 
 /**
- * This function should be called when a packet is ready to be read
- * from the interface. It uses the function low_level_input() that
- * should handle the actual reception of bytes from the network
- * interface. Then the type of the received packet is determined and
- * the appropriate input function is called.
- *
- * @param netif the lwip network interface structure for this ethernetif
+ 当准备好从接口读取数据包时,应调用此函数.
+ 它使用函数low_level_input()来处理从网络接口实际接收的字节.
+ 然后确定接收到的数据包的类型,并调用适当的输入函数.
+ @param netif此ethernetif的lwip网络接口结构.
  */
-static void
-ethernetif_input(struct netif *netif)
+static void ethernetif_input(struct netif *netif)
 {
-  struct ethernetif *ethernetif;
-  struct eth_hdr *ethhdr;
-  struct pbuf *p;
+    struct eth_hdr *ethhdr;
+    struct pbuf *p;
 
-  ethernetif = netif->state;
+    /* move received packet into a new pbuf */
+    p = low_level_input(netif);
 
-  /* move received packet into a new pbuf */
-  p = low_level_input(netif);
-  /* no packet could be read, silently ignore this */
-  if (p == NULL) return;
-  /* points to packet payload, which starts with an Ethernet header */
-  ethhdr = p->payload;
+    /* no packet could be read, silently ignore this */
+    if (p == NULL) return;
 
-  switch (htons(ethhdr->type)) {
-  /* IP or ARP packet? */
-  case ETHTYPE_IP:
-  case ETHTYPE_ARP:
-#if PPPOE_SUPPORT
-  /* PPPoE packet? */
-  case ETHTYPE_PPPOEDISC:
-  case ETHTYPE_PPPOE:
-#endif /* PPPOE_SUPPORT */
-    /* full packet send to tcpip_thread to process */
-    if (netif->input(p, netif)!=ERR_OK)
-     { LWIP_DEBUGF(NETIF_DEBUG, ("ethernetif_input: IP input error\n"));
-       pbuf_free(p);
-       p = NULL;
-     }
-    break;
+    /* 指向以太网报头开头的数据包 */
+    ethhdr = p->payload;
 
-  default:
-    pbuf_free(p);
-    p = NULL;
-    break;
-  }
+    switch (htons(ethhdr->type))
+    {
+        /* IP or ARP packet? */
+        case ETHTYPE_IP:
+        case ETHTYPE_ARP:
+            /* 完整的数据包发送到tcpip_thread进行处理 */
+            if (netif->input(p, netif) != ERR_OK)
+            {
+                pbuf_free(p);
+                p = NULL;
+            }
+            break;
+
+        default:
+            pbuf_free(p);
+            p = NULL;
+            break;
+    }
 }
 
 /**
