@@ -315,274 +315,131 @@ err_t ip_input(struct pbuf *p, struct netif *inp)
     }
 #endif
 
-    /* obtain IP header length in number of 32-bit words */
+    /* 获取IP头长度(以32位字数为单位) */
     iphdr_hlen = IPH_HL(iphdr);
-    /* calculate IP header length in bytes */
+
+    /* 计算IP头长度(以字节为单位) */
     iphdr_hlen *= 4;
-    /* obtain ip length in bytes */
+
+    /* 获取以字节为单位的ip长度 */
     iphdr_len = ntohs(IPH_LEN(iphdr));
 
-    /* header length exceeds first pbuf length, or ip length exceeds total pbuf length? */
-    if ((iphdr_hlen > p->len) || (iphdr_len > p->tot_len)) {
-    if (iphdr_hlen > p->len) {
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_LEVEL_SERIOUS,
-    ("IP header (len %"U16_F") does not fit in first pbuf (len %"U16_F"), IP packet dropped.\n",
-    iphdr_hlen, p->len));
-    }
-    if (iphdr_len > p->tot_len) {
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_LEVEL_SERIOUS,
-    ("IP (len %"U16_F") is longer than pbuf (len %"U16_F"), IP packet dropped.\n",
-    iphdr_len, p->tot_len));
-    }
-    /* free (drop) packet pbufs */
-    pbuf_free(p);
-    IP_STATS_INC(ip.lenerr);
-    IP_STATS_INC(ip.drop);
-    snmp_inc_ipindiscards();
-    return ERR_OK;
+    /* IP头长度超过第一个pbuf长度,或者ip长度超过总pbuf长度? */
+    if ((iphdr_hlen > p->len) || (iphdr_len > p->tot_len))
+    {
+        /* free (drop) packet pbufs */
+        pbuf_free(p);
+        return ERR_OK;
     }
 
     /* verify checksum */
 #if CHECKSUM_CHECK_IP
-    if (inet_chksum(iphdr, iphdr_hlen) != 0) {
-
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_LEVEL_SERIOUS,
-    ("Checksum (0x%"X16_F") failed, IP packet dropped.\n", inet_chksum(iphdr, iphdr_hlen)));
-    ip_debug_print(p);
-    pbuf_free(p);
-    IP_STATS_INC(ip.chkerr);
-    IP_STATS_INC(ip.drop);
-    snmp_inc_ipinhdrerrors();
-    return ERR_OK;
+    if (inet_chksum(iphdr, iphdr_hlen) != 0)
+    {
+        pbuf_free(p);
+        return ERR_OK;
     }
 #endif
 
-    /* Trim pbuf. This should have been done at the netif layer,
-    * but we'll do it anyway just to be sure that its done. */
+    /* 修剪pbuf.
+    这应该已经在netif层完成了,但是无论如何我们还是会这样做,以确保已完成, */
     pbuf_realloc(p, iphdr_len);
 
     /* copy IP addresses to aligned ip_addr_t */
     ip_addr_copy(current_iphdr_dest, iphdr->dest);
     ip_addr_copy(current_iphdr_src, iphdr->src);
 
-    /* match packet against an interface, i.e. is this packet for us? */
-#if LWIP_IGMP
-    if (ip_addr_ismulticast(&current_iphdr_dest)) {
-    if ((inp->flags & NETIF_FLAG_IGMP) && (igmp_lookfor_group(inp, &current_iphdr_dest))) {
-    netif = inp;
-    } else {
-    netif = NULL;
-    }
-    } else
-#endif /* LWIP_IGMP */
-    {
-    /* start trying with inp. if that's not acceptable, start walking the
-    list of configured netifs.
-    'first' is used as a boolean to mark whether we started walking the list */
+    /* 开始尝试inp.
+    如果那是不可接受的,请开始遍历已配置的netif列表.
+    "first"用作布尔值,用于标记我们是否开始遍历列表. */
     int first = 1;
     netif = inp;
-    do {
-    LWIP_DEBUGF(IP_DEBUG, ("ip_input: iphdr->dest 0x%"X32_F" netif->ip_addr 0x%"X32_F" (0x%"X32_F", 0x%"X32_F", 0x%"X32_F")\n",
-    ip4_addr_get_u32(&iphdr->dest), ip4_addr_get_u32(&netif->ip_addr),
-    ip4_addr_get_u32(&iphdr->dest) & ip4_addr_get_u32(&netif->netmask),
-    ip4_addr_get_u32(&netif->ip_addr) & ip4_addr_get_u32(&netif->netmask),
-    ip4_addr_get_u32(&iphdr->dest) & ~ip4_addr_get_u32(&netif->netmask)));
-
-    /* interface is up and configured? */
-    if ((netif_is_up(netif)) && (!ip_addr_isany(&(netif->ip_addr)))) {
-    /* unicast to this interface address? */
-    if (ip_addr_cmp(&current_iphdr_dest, &(netif->ip_addr)) ||
-    /* or broadcast on this interface network address? */
-    ip_addr_isbroadcast(&current_iphdr_dest, netif)) {
-    LWIP_DEBUGF(IP_DEBUG, ("ip_input: packet accepted on interface %c%c\n",
-    netif->name[0], netif->name[1]));
-    /* break out of for loop */
-    break;
-    }
-#if LWIP_AUTOIP
-    /* connections to link-local addresses must persist after changing
-    the netif's address (RFC3927 ch. 1.9) */
-    if ((netif->autoip != NULL) &&
-    ip_addr_cmp(&current_iphdr_dest, &(netif->autoip->llipaddr))) {
-    LWIP_DEBUGF(IP_DEBUG, ("ip_input: LLA packet accepted on interface %c%c\n",
-    netif->name[0], netif->name[1]));
-    /* break out of for loop */
-    break;
-    }
-#endif /* LWIP_AUTOIP */
-    }
-    if (first) {
-    first = 0;
-    netif = netif_list;
-    } else {
-    netif = netif->next;
-    }
-    if (netif == inp) {
-    netif = netif->next;
-    }
+    do
+    {
+        /* 接口已启动并已配置? */
+        if ((netif_is_up(netif)) && (!ip_addr_isany(&(netif->ip_addr))))
+        {
+            /* 单播到该地址或在该接口上广播 */
+            if (ip_addr_cmp(&current_iphdr_dest, &(netif->ip_addr)) ||
+                ip_addr_isbroadcast(&current_iphdr_dest, netif))
+            {
+                break;
+            }
+        }
+        if (first)
+        {
+            first = 0;
+            netif = netif_list;
+        }
+        else
+        {
+            netif = netif->next;
+        }
+        if (netif == inp)
+        {
+            netif = netif->next;
+        }
     } while(netif != NULL);
-    }
 
-#if IP_ACCEPT_LINK_LAYER_ADDRESSING
-    /* Pass DHCP messages regardless of destination address. DHCP traffic is addressed
-    * using link layer addressing (such as Ethernet MAC) so we must not filter on IP.
-    * According to RFC 1542 section 3.1.1, referred by RFC 2131).
-    *
-    * If you want to accept private broadcast communication while a netif is down,
-    * define LWIP_IP_ACCEPT_UDP_PORT(dst_port), e.g.:
-    *
-    * #define LWIP_IP_ACCEPT_UDP_PORT(dst_port) ((dst_port) == PP_NTOHS(12345))
-    */
-    if (netif == NULL) {
-    /* remote port is DHCP server? */
-    if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
-    struct udp_hdr *udphdr = (struct udp_hdr *)((u8_t *)iphdr + iphdr_hlen);
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_TRACE, ("ip_input: UDP packet to DHCP client port %"U16_F"\n",
-    ntohs(udphdr->dest)));
-    if (IP_ACCEPT_LINK_LAYER_ADDRESSED_PORT(udphdr->dest)) {
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_TRACE, ("ip_input: DHCP packet accepted.\n"));
-    netif = inp;
-    check_ip_src = 0;
-    }
-    }
-    }
-#endif /* IP_ACCEPT_LINK_LAYER_ADDRESSING */
-
-    /* broadcast or multicast packet source address? Compliant with RFC 1122: 3.2.1.3 */
-#if IP_ACCEPT_LINK_LAYER_ADDRESSING
-    /* DHCP servers need 0.0.0.0 to be allowed as source address (RFC 1.1.2.2: 3.2.1.3/a) */
-    if (check_ip_src && !ip_addr_isany(&current_iphdr_src))
-#endif /* IP_ACCEPT_LINK_LAYER_ADDRESSING */
-    {  if ((ip_addr_isbroadcast(&current_iphdr_src, inp)) ||
-    (ip_addr_ismulticast(&current_iphdr_src))) {
-    /* packet source is not valid */
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_WARNING, ("ip_input: packet source is not valid.\n"));
-    /* free (drop) packet pbufs */
-    pbuf_free(p);
-    IP_STATS_INC(ip.drop);
-    snmp_inc_ipinaddrerrors();
-    snmp_inc_ipindiscards();
-    return ERR_OK;
-    }
+    /* 广播还是组播数据包的源地址? 符合RFC 1122：3.2.1.3 */
+    if ((ip_addr_isbroadcast(&current_iphdr_src, inp)) || (ip_addr_ismulticast(&current_iphdr_src)))
+    {
+        pbuf_free(p);
+        return ERR_OK;
     }
 
     /* packet not for us? */
-    if (netif == NULL) {
-    /* packet not for us, route or discard */
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_TRACE, ("ip_input: packet not for us.\n"));
-#if IP_FORWARD
-    /* non-broadcast packet? */
-    if (!ip_addr_isbroadcast(&current_iphdr_dest, inp)) {
-    /* try to forward IP packet on (other) interfaces */
-    ip_forward(p, iphdr, inp);
-    } else
-#endif /* IP_FORWARD */
+    if (netif == NULL)
     {
-    snmp_inc_ipinaddrerrors();
-    snmp_inc_ipindiscards();
-    }
-    pbuf_free(p);
-    return ERR_OK;
-    }
-    /* packet consists of multiple fragments? */
-    if ((IPH_OFFSET(iphdr) & PP_HTONS(IP_OFFMASK | IP_MF)) != 0) {
-#if IP_REASSEMBLY /* packet fragment reassembly code present? */
-    LWIP_DEBUGF(IP_DEBUG, ("IP packet is a fragment (id=0x%04"X16_F" tot_len=%"U16_F" len=%"U16_F" MF=%"U16_F" offset=%"U16_F"), calling ip_reass()\n",
-    ntohs(IPH_ID(iphdr)), p->tot_len, ntohs(IPH_LEN(iphdr)), !!(IPH_OFFSET(iphdr) & PP_HTONS(IP_MF)), (ntohs(IPH_OFFSET(iphdr)) & IP_OFFMASK)*8));
-    /* reassemble the packet*/
-    p = ip_reass(p);
-    /* packet not fully reassembled yet? */
-    if (p == NULL) {
-    return ERR_OK;
-    }
-    iphdr = (struct ip_hdr *)p->payload;
-#else /* IP_REASSEMBLY == 0, no packet fragment reassembly code present */
-    pbuf_free(p);
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_LEVEL_SERIOUS, ("IP packet dropped since it was fragmented (0x%"X16_F") (while IP_REASSEMBLY == 0).\n",
-    ntohs(IPH_OFFSET(iphdr))));
-    IP_STATS_INC(ip.opterr);
-    IP_STATS_INC(ip.drop);
-    /* unsupported protocol feature */
-    snmp_inc_ipinunknownprotos();
-    return ERR_OK;
-#endif /* IP_REASSEMBLY */
+        /* 包不适合我们,路由或丢弃 */
+        pbuf_free(p);
+        return ERR_OK;
     }
 
-#if IP_OPTIONS_ALLOWED == 0 /* no support for IP options in the IP header? */
+    /* 包由多个片段组成? */
+    if ((IPH_OFFSET(iphdr) & PP_HTONS(IP_OFFMASK | IP_MF)) != 0)
+    {
+        /* 重组包*/
+        p = ip_reass(p);
 
-#if LWIP_IGMP
-    /* there is an extra "router alert" option in IGMP messages which we allow for but do not police */
-    if((iphdr_hlen > IP_HLEN) &&  (IPH_PROTO(iphdr) != IP_PROTO_IGMP)) {
-#else
-    if (iphdr_hlen > IP_HLEN) {
-#endif /* LWIP_IGMP */
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_LEVEL_SERIOUS, ("IP packet dropped since there were IP options (while IP_OPTIONS_ALLOWED == 0).\n"));
-    pbuf_free(p);
-    IP_STATS_INC(ip.opterr);
-    IP_STATS_INC(ip.drop);
-    /* unsupported protocol feature */
-    snmp_inc_ipinunknownprotos();
-    return ERR_OK;
+        /* packet not fully reassembled yet? */
+        if (p == NULL)
+        {
+            return ERR_OK;
+        }
+        iphdr = (struct ip_hdr *)p->payload;
     }
-#endif /* IP_OPTIONS_ALLOWED == 0 */
 
-    /* send to upper layers */
-    LWIP_DEBUGF(IP_DEBUG, ("ip_input: \n"));
-    ip_debug_print(p);
-    LWIP_DEBUGF(IP_DEBUG, ("ip_input: p->len %"U16_F" p->tot_len %"U16_F"\n", p->len, p->tot_len));
-
+    /* 发送到上层 */
     current_netif = inp;
     current_header = iphdr;
 
-#if LWIP_RAW
-    /* raw input did not eat the packet? */
     if (raw_input(p, inp) == 0)
-#endif /* LWIP_RAW */
     {
-    switch (IPH_PROTO(iphdr)) {
-#if LWIP_UDP
-    case IP_PROTO_UDP:
-#if LWIP_UDPLITE
-    case IP_PROTO_UDPLITE:
-#endif /* LWIP_UDPLITE */
-    snmp_inc_ipindelivers();
-    udp_input(p, inp);
-    break;
-#endif /* LWIP_UDP */
-#if LWIP_TCP
-    case IP_PROTO_TCP:
-    snmp_inc_ipindelivers();
-    tcp_input(p, inp);
-    break;
-#endif /* LWIP_TCP */
-#if LWIP_ICMP
-    case IP_PROTO_ICMP:
-    snmp_inc_ipindelivers();
-    icmp_input(p, inp);
-    break;
-#endif /* LWIP_ICMP */
-#if LWIP_IGMP
-    case IP_PROTO_IGMP:
-    igmp_input(p, inp, &current_iphdr_dest);
-    break;
-#endif /* LWIP_IGMP */
-    default:
-#if LWIP_ICMP
-    /* send ICMP destination protocol unreachable unless is was a broadcast */
-    if (!ip_addr_isbroadcast(&current_iphdr_dest, inp) &&
-    !ip_addr_ismulticast(&current_iphdr_dest)) {
-    p->payload = iphdr;
-    icmp_dest_unreach(p, ICMP_DUR_PROTO);
-    }
-#endif /* LWIP_ICMP */
-    pbuf_free(p);
+        switch (IPH_PROTO(iphdr))
+        {
+            case IP_PROTO_UDP:
+            udp_input(p, inp);
+            break;
 
-    LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_LEVEL_SERIOUS, ("Unsupported transport protocol %"U16_F"\n", IPH_PROTO(iphdr)));
+            case IP_PROTO_TCP:
+            tcp_input(p, inp);
+            break;
 
-    IP_STATS_INC(ip.proterr);
-    IP_STATS_INC(ip.drop);
-    snmp_inc_ipinunknownprotos();
-    }
+            case IP_PROTO_ICMP:
+            icmp_input(p, inp);
+            break;
+
+            default:
+            /* 发送ICMP目标协议不可达,除非是广播 */
+            if (!ip_addr_isbroadcast(&current_iphdr_dest, inp) &&
+                !ip_addr_ismulticast(&current_iphdr_dest))
+            {
+                p->payload = iphdr;
+                icmp_dest_unreach(p, ICMP_DUR_PROTO);
+            }
+            pbuf_free(p);
+        }
     }
 
     current_netif = NULL;

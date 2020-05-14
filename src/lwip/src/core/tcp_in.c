@@ -80,348 +80,285 @@ static err_t tcp_listen_input(struct tcp_pcb_listen *pcb);
 static err_t tcp_timewait_input(struct tcp_pcb *pcb);
 
 /**
- * The initial input processing of TCP. It verifies the TCP header, demultiplexes
- * the segment between the PCBs and passes it on to tcp_process(), which implements
- * the TCP finite state machine. This function is called by the IP layer (in
- * ip_input()).
- *
- * @param p received TCP segment to process (p->payload pointing to the IP header)
- * @param inp network interface on which this segment was received
+ TCP的初始输入处理.
+ 它验证TCP报头,对PCB之间的段进行多路分解,然后将其传递给tcp_process(),后者实现TCP有限状态机.
+ IP层(在ip_input()中)调用此函数.
+ @param p收到要处理的TCP段(p-> payload指向IP标头)
+ @param inp网络接口,在此接口上接收到此段
  */
-void
-tcp_input(struct pbuf *p, struct netif *inp)
+void tcp_input(struct pbuf *p, struct netif *inp)
 {
-  struct tcp_pcb *pcb, *prev;
-  struct tcp_pcb_listen *lpcb;
-#if SO_REUSE
-  struct tcp_pcb *lpcb_prev = NULL;
-  struct tcp_pcb_listen *lpcb_any = NULL;
-#endif /* SO_REUSE */
-  u8_t hdrlen;
-  err_t err;
+    struct tcp_pcb *pcb, *prev;
+    struct tcp_pcb_listen *lpcb;
+    u8_t hdrlen;
+    err_t err;
 
-  PERF_START;
+    iphdr = (struct ip_hdr *)p->payload;
+    tcphdr = (struct tcp_hdr *)((u8_t *)p->payload + IPH_HL(iphdr) * 4);
 
-  TCP_STATS_INC(tcp.recv);
-  snmp_inc_tcpinsegs();
-
-  iphdr = (struct ip_hdr *)p->payload;
-  tcphdr = (struct tcp_hdr *)((u8_t *)p->payload + IPH_HL(iphdr) * 4);
-
-#if TCP_INPUT_DEBUG
-  tcp_debug_print(tcphdr);
-#endif
-
-  /* remove header from payload */
-  if (pbuf_header(p, -((s16_t)(IPH_HL(iphdr) * 4))) || (p->tot_len < sizeof(struct tcp_hdr))) {
-    /* drop short packets */
-    LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: short packet (%"U16_F" bytes) discarded\n", p->tot_len));
-    TCP_STATS_INC(tcp.lenerr);
-    goto dropped;
-  }
-
-  /* Don't even process incoming broadcasts/multicasts. */
-  if (ip_addr_isbroadcast(&current_iphdr_dest, inp) ||
-      ip_addr_ismulticast(&current_iphdr_dest)) {
-    TCP_STATS_INC(tcp.proterr);
-    goto dropped;
-  }
-
-#if CHECKSUM_CHECK_TCP
-  /* Verify TCP checksum. */
-  if (inet_chksum_pseudo(p, ip_current_src_addr(), ip_current_dest_addr(),
-      IP_PROTO_TCP, p->tot_len) != 0) {
-      LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: packet discarded due to failing checksum 0x%04"X16_F"\n",
-        inet_chksum_pseudo(p, ip_current_src_addr(), ip_current_dest_addr(),
-      IP_PROTO_TCP, p->tot_len)));
-#if TCP_DEBUG
-    tcp_debug_print(tcphdr);
-#endif /* TCP_DEBUG */
-    TCP_STATS_INC(tcp.chkerr);
-    goto dropped;
-  }
-#endif
-
-  /* Move the payload pointer in the pbuf so that it points to the
-     TCP data instead of the TCP header. */
-  hdrlen = TCPH_HDRLEN(tcphdr);
-  if(pbuf_header(p, -(hdrlen * 4))){
-    /* drop short packets */
-    LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: short packet\n"));
-    TCP_STATS_INC(tcp.lenerr);
-    goto dropped;
-  }
-
-  /* Convert fields in TCP header to host byte order. */
-  tcphdr->src = ntohs(tcphdr->src);
-  tcphdr->dest = ntohs(tcphdr->dest);
-  seqno = tcphdr->seqno = ntohl(tcphdr->seqno);
-  ackno = tcphdr->ackno = ntohl(tcphdr->ackno);
-  tcphdr->wnd = ntohs(tcphdr->wnd);
-
-  flags = TCPH_FLAGS(tcphdr);
-  tcplen = p->tot_len + ((flags & (TCP_FIN | TCP_SYN)) ? 1 : 0);
-
-  /* Demultiplex an incoming segment. First, we check if it is destined
-     for an active connection. */
-  prev = NULL;
-
-  
-  for(pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next) {
-    LWIP_ASSERT("tcp_input: active pcb->state != CLOSED", pcb->state != CLOSED);
-    LWIP_ASSERT("tcp_input: active pcb->state != TIME-WAIT", pcb->state != TIME_WAIT);
-    LWIP_ASSERT("tcp_input: active pcb->state != LISTEN", pcb->state != LISTEN);
-    if (pcb->remote_port == tcphdr->src &&
-       pcb->local_port == tcphdr->dest &&
-       ip_addr_cmp(&(pcb->remote_ip), &current_iphdr_src) &&
-       ip_addr_cmp(&(pcb->local_ip), &current_iphdr_dest)) {
-
-      /* Move this PCB to the front of the list so that subsequent
-         lookups will be faster (we exploit locality in TCP segment
-         arrivals). */
-      LWIP_ASSERT("tcp_input: pcb->next != pcb (before cache)", pcb->next != pcb);
-      if (prev != NULL) {
-        prev->next = pcb->next;
-        pcb->next = tcp_active_pcbs;
-        tcp_active_pcbs = pcb;
-      }
-      LWIP_ASSERT("tcp_input: pcb->next != pcb (after cache)", pcb->next != pcb);
-      break;
-    }
-    prev = pcb;
-  }
-
-  if (pcb == NULL) {
-    /* If it did not go to an active connection, we check the connections
-       in the TIME-WAIT state. */
-    for(pcb = tcp_tw_pcbs; pcb != NULL; pcb = pcb->next) {
-      LWIP_ASSERT("tcp_input: TIME-WAIT pcb->state == TIME-WAIT", pcb->state == TIME_WAIT);
-      if (pcb->remote_port == tcphdr->src &&
-         pcb->local_port == tcphdr->dest &&
-         ip_addr_cmp(&(pcb->remote_ip), &current_iphdr_src) &&
-         ip_addr_cmp(&(pcb->local_ip), &current_iphdr_dest)) {
-        /* We don't really care enough to move this PCB to the front
-           of the list since we are not very likely to receive that
-           many segments for connections in TIME-WAIT. */
-        LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: packed for TIME_WAITing connection.\n"));
-        tcp_timewait_input(pcb);
-        pbuf_free(p);
-        return;
-      }
-    }
-
-    /* Finally, if we still did not get a match, we check all PCBs that
-       are LISTENing for incoming connections. */
-    prev = NULL;
-    for(lpcb = tcp_listen_pcbs.listen_pcbs; lpcb != NULL; lpcb = lpcb->next) {
-      if (lpcb->local_port == tcphdr->dest) {
-#if SO_REUSE
-        if (ip_addr_cmp(&(lpcb->local_ip), &current_iphdr_dest)) {
-          /* found an exact match */
-          break;
-        } else if(ip_addr_isany(&(lpcb->local_ip))) {
-          /* found an ANY-match */
-          lpcb_any = lpcb;
-          lpcb_prev = prev;
-        }
-#else /* SO_REUSE */
-        if (ip_addr_cmp(&(lpcb->local_ip), &current_iphdr_dest) ||
-            ip_addr_isany(&(lpcb->local_ip))) {
-          /* found a match */
-          break;
-        }
-#endif /* SO_REUSE */
-      }
-      prev = (struct tcp_pcb *)lpcb;
-    }
-#if SO_REUSE
-    /* first try specific local IP */
-    if (lpcb == NULL) {
-      /* only pass to ANY if no specific local IP has been found */
-      lpcb = lpcb_any;
-      prev = lpcb_prev;
-    }
-#endif /* SO_REUSE */
-    if (lpcb != NULL) {
-      /* Move this PCB to the front of the list so that subsequent
-         lookups will be faster (we exploit locality in TCP segment
-         arrivals). */
-      if (prev != NULL) {
-        ((struct tcp_pcb_listen *)prev)->next = lpcb->next;
-              /* our successor is the remainder of the listening list */
-        lpcb->next = tcp_listen_pcbs.listen_pcbs;
-              /* put this listening pcb at the head of the listening list */
-        tcp_listen_pcbs.listen_pcbs = lpcb;
-      }
-    
-      LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: packed for LISTENing connection.\n"));
-      tcp_listen_input(lpcb);
-      pbuf_free(p);
-      return;
-    }
-  }
-
-#if TCP_INPUT_DEBUG
-  LWIP_DEBUGF(TCP_INPUT_DEBUG, ("+-+-+-+-+-+-+-+-+-+-+-+-+-+- tcp_input: flags "));
-  tcp_debug_print_flags(TCPH_FLAGS(tcphdr));
-  LWIP_DEBUGF(TCP_INPUT_DEBUG, ("-+-+-+-+-+-+-+-+-+-+-+-+-+-+\n"));
-#endif /* TCP_INPUT_DEBUG */
-
-
-  if (pcb != NULL) {
-    /* The incoming segment belongs to a connection. */
-#if TCP_INPUT_DEBUG
-#if TCP_DEBUG
-    tcp_debug_print_state(pcb->state);
-#endif /* TCP_DEBUG */
-#endif /* TCP_INPUT_DEBUG */
-
-    /* Set up a tcp_seg structure. */
-    inseg.next = NULL;
-    inseg.len = p->tot_len;
-    inseg.p = p;
-    inseg.tcphdr = tcphdr;
-
-    recv_data = NULL;
-    recv_flags = 0;
-
-    if (flags & TCP_PSH) {
-      p->flags |= PBUF_FLAG_PUSH;
-    }
-
-    /* If there is data which was previously "refused" by upper layer */
-    if (pcb->refused_data != NULL) {
-      if ((tcp_process_refused_data(pcb) == ERR_ABRT) ||
-        ((pcb->refused_data != NULL) && (tcplen > 0))) {
-        /* pcb has been aborted or refused data is still refused and the new
-           segment contains data */
-        TCP_STATS_INC(tcp.drop);
-        snmp_inc_tcpinerrs();
-        goto aborted;
-      }
-    }
-    tcp_input_pcb = pcb;
-    err = tcp_process(pcb);
-    /* A return value of ERR_ABRT means that tcp_abort() was called
-       and that the pcb has been freed. If so, we don't do anything. */
-    if (err != ERR_ABRT) {
-      if (recv_flags & TF_RESET) {
-        /* TF_RESET means that the connection was reset by the other
-           end. We then call the error callback to inform the
-           application that the connection is dead before we
-           deallocate the PCB. */
-        TCP_EVENT_ERR(pcb->errf, pcb->callback_arg, ERR_RST);
-        tcp_pcb_remove(&tcp_active_pcbs, pcb);
-        memp_free(MEMP_TCP_PCB, pcb);
-      } else if (recv_flags & TF_CLOSED) {
-        /* The connection has been closed and we will deallocate the
-           PCB. */
-        if (!(pcb->flags & TF_RXCLOSED)) {
-          /* Connection closed although the application has only shut down the
-             tx side: call the PCB's err callback and indicate the closure to
-             ensure the application doesn't continue using the PCB. */
-          TCP_EVENT_ERR(pcb->errf, pcb->callback_arg, ERR_CLSD);
-        }
-        tcp_pcb_remove(&tcp_active_pcbs, pcb);
-        memp_free(MEMP_TCP_PCB, pcb);
-      } else {
-        err = ERR_OK;
-        /* If the application has registered a "sent" function to be
-           called when new send buffer space is available, we call it
-           now. */
-        if (pcb->acked > 0) {
-          TCP_EVENT_SENT(pcb, pcb->acked, err);
-          if (err == ERR_ABRT) {
-            goto aborted;
-          }
-        }
-
-        if (recv_data != NULL) {
-          LWIP_ASSERT("pcb->refused_data == NULL", pcb->refused_data == NULL);
-          if (pcb->flags & TF_RXCLOSED) {
-            /* received data although already closed -> abort (send RST) to
-               notify the remote host that not all data has been processed */
-            pbuf_free(recv_data);
-            tcp_abort(pcb);
-            goto aborted;
-          }
-
-          /* Notify application that data has been received. */
-          TCP_EVENT_RECV(pcb, recv_data, ERR_OK, err);
-          if (err == ERR_ABRT) {
-            goto aborted;
-          }
-
-          /* If the upper layer can't receive this data, store it */
-          if (err != ERR_OK) {
-            pcb->refused_data = recv_data;
-            LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_input: keep incoming packet, because pcb is \"full\"\n"));
-          }
-        }
-
-        /* If a FIN segment was received, we call the callback
-           function with a NULL buffer to indicate EOF. */
-        if (recv_flags & TF_GOT_FIN) {
-          if (pcb->refused_data != NULL) {
-            /* Delay this if we have refused data. */
-            pcb->refused_data->flags |= PBUF_FLAG_TCP_FIN;
-          } else {
-            /* correct rcv_wnd as the application won't call tcp_recved()
-               for the FIN's seqno */
-            if (pcb->rcv_wnd != TCP_WND) {
-              pcb->rcv_wnd++;
-            }
-            TCP_EVENT_CLOSED(pcb, err);
-            if (err == ERR_ABRT) {
-              goto aborted;
-            }
-          }
-        }
-
-        tcp_input_pcb = NULL;
-        /* Try to send something out. */
-        tcp_output(pcb);
-#if TCP_INPUT_DEBUG
-#if TCP_DEBUG
-        tcp_debug_print_state(pcb->state);
-#endif /* TCP_DEBUG */
-#endif /* TCP_INPUT_DEBUG */
-      }
-    }
-    /* Jump target if pcb has been aborted in a callback (by calling tcp_abort()).
-       Below this line, 'pcb' may not be dereferenced! */
-aborted:
-    tcp_input_pcb = NULL;
-    recv_data = NULL;
-
-    /* give up our reference to inseg.p */
-    if (inseg.p != NULL)
+    /* 移除IP头,并判断包长度*/
+    if (pbuf_header(p, -((s16_t)(IPH_HL(iphdr) * 4))) || (p->tot_len < sizeof(struct tcp_hdr)))
     {
-      pbuf_free(inseg.p);
-      inseg.p = NULL;
+        goto dropped;
     }
-  } else {
 
-    /* If no matching PCB was found, send a TCP RST (reset) to the
-       sender. */
-    LWIP_DEBUGF(TCP_RST_DEBUG, ("tcp_input: no PCB match found, resetting.\n"));
-    if (!(TCPH_FLAGS(tcphdr) & TCP_RST)) {
-      TCP_STATS_INC(tcp.proterr);
-      TCP_STATS_INC(tcp.drop);
-      tcp_rst(ackno, seqno + tcplen,
-        ip_current_dest_addr(), ip_current_src_addr(),
-        tcphdr->dest, tcphdr->src);
+    /* 甚至不处理传入的广播/多播. */
+    if (ip_addr_isbroadcast(&current_iphdr_dest, inp) ||
+        ip_addr_ismulticast(&current_iphdr_dest))
+    {
+        goto dropped;
     }
-    pbuf_free(p);
-  }
 
-  LWIP_ASSERT("tcp_input: tcp_pcbs_sane()", tcp_pcbs_sane());
-  PERF_STOP("tcp_input");
-  return;
+    /* Verify TCP checksum. */
+    if (inet_chksum_pseudo(p, ip_current_src_addr(), ip_current_dest_addr(),
+        IP_PROTO_TCP, p->tot_len) != 0)
+    {
+        goto dropped;
+    }
+
+    /* 移动payload指针到pbuf中,使其指向TCP数据而不是TCP头. */
+    hdrlen = TCPH_HDRLEN(tcphdr);
+    if (pbuf_header(p, -(hdrlen * 4)))
+    {
+        goto dropped;
+    }
+
+    /* 将TCP头中的字段转换为主机字节顺序. */
+    tcphdr->src = ntohs(tcphdr->src);
+    tcphdr->dest = ntohs(tcphdr->dest);
+    seqno = tcphdr->seqno = ntohl(tcphdr->seqno);
+    ackno = tcphdr->ackno = ntohl(tcphdr->ackno);
+    tcphdr->wnd = ntohs(tcphdr->wnd);
+
+    flags = TCPH_FLAGS(tcphdr);
+    tcplen = p->tot_len + ((flags & (TCP_FIN | TCP_SYN)) ? 1 : 0);
+
+    /* 多路分解传入的段. 首先,我们检查它是否用于活动连接. */
+    prev = NULL;
+    for (pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next)
+    {
+        if (pcb->remote_port == tcphdr->src &&
+            pcb->local_port == tcphdr->dest &&
+            ip_addr_cmp(&(pcb->remote_ip), &current_iphdr_src) &&
+            ip_addr_cmp(&(pcb->local_ip), &current_iphdr_dest))
+        {
+            /* 将此PCB移到列表的最前面,这样以后的查找将更快(我们在TCP段到达中使用局部性). */
+            if (prev != NULL)
+            {
+                prev->next = pcb->next;
+                pcb->next = tcp_active_pcbs;
+                tcp_active_pcbs = pcb;
+            }
+            break;
+        }
+        prev = pcb;
+    }
+
+    if (pcb == NULL)
+    {
+        /* 如果没有建立活动连接,我们将检查连接处于TIME-WAIT状态. */
+        for (pcb = tcp_tw_pcbs; pcb != NULL; pcb = pcb->next)
+        {
+            if (pcb->remote_port == tcphdr->src &&
+                pcb->local_port == tcphdr->dest &&
+                ip_addr_cmp(&(pcb->remote_ip), &current_iphdr_src) &&
+                ip_addr_cmp(&(pcb->local_ip), &current_iphdr_dest))
+            {
+                /* 我们不太在意将此PCB移到列表的最前面,
+                因为在TIME-WAIT中不太可能收到那么多分段用于连接. */
+                tcp_timewait_input(pcb);
+                pbuf_free(p);
+                return;
+            }
+        }
+
+        /* 最后,如果仍然没有找到匹配项,我们将检查所有正在侦听传入连接的PCB. */
+        prev = NULL;
+        for (lpcb = tcp_listen_pcbs.listen_pcbs; lpcb != NULL; lpcb = lpcb->next)
+        {
+            if (lpcb->local_port == tcphdr->dest)
+            {
+                if (ip_addr_cmp(&(lpcb->local_ip), &current_iphdr_dest) ||
+                    ip_addr_isany(&(lpcb->local_ip)))
+                {
+                    /* found a match */
+                    break;
+                }
+            }
+            prev = (struct tcp_pcb *)lpcb;
+        }
+
+        if (lpcb != NULL)
+        {
+            /* 将此PCB移到列表的最前面,
+            这样以后的查找将更快(我们在TCP段到达中使用局部性).*/
+            if (prev != NULL)
+            {
+                ((struct tcp_pcb_listen *)prev)->next = lpcb->next;
+
+                /* our successor is the remainder of the listening list */
+                lpcb->next = tcp_listen_pcbs.listen_pcbs;
+
+                /* 将此监听pcb放在监听列表的开头 */
+                tcp_listen_pcbs.listen_pcbs = lpcb;
+            }
+            tcp_listen_input(lpcb);
+            pbuf_free(p);
+            return;
+        }
+    }
+
+    if (pcb != NULL)
+    {
+        /* 传入段属于连接. */
+        /* 设置一个tcp_seg结构 */
+        inseg.next = NULL;
+        inseg.len = p->tot_len;
+        inseg.p = p;
+        inseg.tcphdr = tcphdr;
+
+        recv_data = NULL;
+        recv_flags = 0;
+
+        if (flags & TCP_PSH)
+        {
+            p->flags |= PBUF_FLAG_PUSH;
+        }
+
+        /* 如果存在先前被上层"拒绝"的数据 */
+        if (pcb->refused_data != NULL)
+        {
+            if ((tcp_process_refused_data(pcb) == ERR_ABRT) ||
+                ((pcb->refused_data != NULL) && (tcplen > 0)))
+            {
+                /* pcb已中止或拒绝的数据仍被拒绝,新段包含数据 */
+                goto aborted;
+            }
+        }
+        tcp_input_pcb = pcb;
+        err = tcp_process(pcb);
+
+        /* ERR_ABRT的返回值表示已调用tcp_abort()且pcb已释放. 
+        如果是这样,我们什么也不做. */
+        if (err != ERR_ABRT)
+        {
+            if (recv_flags & TF_RESET)
+            {
+                /* TF_RESET表示另一端已重置连接. 然后,在取消分配PCB之前,
+                我们调用错误回调以通知应用程序连接已死. */
+                TCP_EVENT_ERR(pcb->errf, pcb->callback_arg, ERR_RST);
+                tcp_pcb_remove(&tcp_active_pcbs, pcb);
+                memp_free(MEMP_TCP_PCB, pcb);
+            }
+            else if (recv_flags & TF_CLOSED)
+            {
+                /* 连接已关闭,我们将重新分配PCB.*/
+                if (!(pcb->flags & TF_RXCLOSED))
+                {
+                    /* 尽管应用程序仅关闭了TX端,但连接已关闭:
+                    调用PCB的err回调并指出关闭状态,以确保应用程序不会继续使用PCB. */
+                    TCP_EVENT_ERR(pcb->errf, pcb->callback_arg, ERR_CLSD);
+                }
+                tcp_pcb_remove(&tcp_active_pcbs, pcb);
+                memp_free(MEMP_TCP_PCB, pcb);
+            }
+            else
+            {
+                err = ERR_OK;
+                /* 如果应用程序已经注册了"发送"功能,
+                当有新的发送缓冲区空间可用时将被调用,我们现在将其调用. */
+                if (pcb->acked > 0)
+                {
+                    TCP_EVENT_SENT(pcb, pcb->acked, err);
+                    if (err == ERR_ABRT)
+                    {
+                        goto aborted;
+                    }
+                }
+
+                if (recv_data != NULL)
+                {
+                    if (pcb->flags & TF_RXCLOSED)
+                    {
+                        /* 尽管已关闭但仍接收到数据->中止(发送RST)
+                        以通知远程主机并非所有数据都已处理 */
+                        pbuf_free(recv_data);
+                        tcp_abort(pcb);
+                        goto aborted;
+                    }
+
+                    /* 通知应用程序已接收到数据. */
+                    TCP_EVENT_RECV(pcb, recv_data, ERR_OK, err);
+                    if (err == ERR_ABRT)
+                    {
+                        goto aborted;
+                    }
+
+                    /* 如果上层无法接收此数据,则将其存储 */
+                    if (err != ERR_OK)
+                    {
+                        pcb->refused_data = recv_data;
+                    }
+                }
+
+                /* 如果接收到FIN段,则使用NULL缓冲区调用回调函数以指示EOF. */
+                if (recv_flags & TF_GOT_FIN)
+                {
+                    if (pcb->refused_data != NULL)
+                    {
+                        /* 如果我们拒绝数据,请延迟此操作. */
+                        pcb->refused_data->flags |= PBUF_FLAG_TCP_FIN;
+                    }
+                    else
+                    {
+                        /* 正确的rcv_wnd,因为应用程序不会为FIN的seqno调用tcp_recved() */
+                        if (pcb->rcv_wnd != TCP_WND)
+                        {
+                            pcb->rcv_wnd++;
+                        }
+                        TCP_EVENT_CLOSED(pcb, err);
+                        if (err == ERR_ABRT)
+                        {
+                            goto aborted;
+                        }
+                    }
+                }
+
+                tcp_input_pcb = NULL;
+                /* Try to send something out. */
+                tcp_output(pcb);
+            }
+        }
+
+        /* 如果pcb已在回调中中止(通过调用tcp_abort()),则跳转目标.
+        在此行之下, 'pcb'可能不会被取消引用! */
+aborted:
+        tcp_input_pcb = NULL;
+        recv_data = NULL;
+
+        /* 放弃我们对inseg.p的引用 */
+        if (inseg.p != NULL)
+        {
+            pbuf_free(inseg.p);
+            inseg.p = NULL;
+        }
+    }
+    else
+    {
+        /* 如果未找到匹配的PCB,则将TCP RST(复位)发送给发送方. */
+        if (!(TCPH_FLAGS(tcphdr) & TCP_RST))
+        {
+            tcp_rst(ackno, seqno + tcplen,
+                    ip_current_dest_addr(), ip_current_src_addr(),
+                    tcphdr->dest, tcphdr->src);
+        }
+        pbuf_free(p);
+    }
+
+    return;
+
 dropped:
-  TCP_STATS_INC(tcp.drop);
-  snmp_inc_tcpinerrs();
-  pbuf_free(p);
+    pbuf_free(p);
 }
 
 /**
@@ -561,15 +498,11 @@ tcp_timewait_input(struct tcp_pcb *pcb)
 }
 
 /**
- * Implements the TCP state machine. Called by tcp_input. In some
- * states tcp_receive() is called to receive data. The tcp_seg
- * argument will be freed by the caller (tcp_input()) unless the
- * recv_data pointer in the pcb is set.
- *
- * @param pcb the tcp_pcb for which a segment arrived
- *
- * @note the segment which arrived is saved in global variables, therefore only the pcb
- *       involved is passed as a parameter to this function
+ 实现TCP状态机.
+ 由tcp_input调用.在某些状态下,调用tcp_receive()来接收数据.
+ 除非在pcb中设置了recv_data指针,否则调用方(tcp_input())将释放tcp_seg参数.
+ @param pcb段到达的tcp_pcb
+ @note到达的段将保存在全局变量中,因此仅将涉及的pcb作为参数传递给此函数
  */
 static err_t
 tcp_process(struct tcp_pcb *pcb)

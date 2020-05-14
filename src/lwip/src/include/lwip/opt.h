@@ -501,27 +501,25 @@
    --------------------------------
 */
 /**
- * IP_FORWARD==1: Enables the ability to forward IP packets across network
- * interfaces. If you are going to run lwIP on a device with only one network
- * interface, define this to 0.
+ * IP_FORWARD==1: 启用跨网络接口转发IP数据包的功能.
+ 如果要在只有一个网络接口的设备上运行lwIP,请将其定义为0.
  */
 #ifndef IP_FORWARD
 #define IP_FORWARD                      0
 #endif
 
 /**
- * IP_OPTIONS_ALLOWED: Defines the behavior for IP options.
- *      IP_OPTIONS_ALLOWED==0: All packets with IP options are dropped.
- *      IP_OPTIONS_ALLOWED==1: IP options are allowed (but not parsed).
+ * 定义IP选项的行为.
+ * IP_OPTIONS_ALLOWED == 0:丢弃所有带有IP选项的数据包.
+ * IP_OPTIONS_ALLOWED == 1:允许IP选项(但不解析).
  */
 #ifndef IP_OPTIONS_ALLOWED
 #define IP_OPTIONS_ALLOWED              1
 #endif
 
 /**
- * IP_REASSEMBLY==1: Reassemble incoming fragmented IP packets. Note that
- * this option does not affect outgoing packet sizes, which can be controlled
- * via IP_FRAG.
+ * IP_REASSEMBLY==1: 重新组装传入的分段IP数据包.
+ 请注意,此选项不会影响传出数据包的大小,这可以通过IP_FRAG进行控制.
  */
 #ifndef IP_REASSEMBLY
 #define IP_REASSEMBLY                   1
@@ -624,8 +622,8 @@
    ----------------------------------
 */
 /**
- * LWIP_ICMP==1: Enable ICMP module inside the IP stack.
- * Be careful, disable that make your product non-compliant to RFC1122
+ * LWIP_ICMP==1: 在IP堆栈中启用ICMP模块.
+ * 请小心,禁用它会使您的产品不符合RFC1122
  */
 #ifndef LWIP_ICMP
 #define LWIP_ICMP                       1
