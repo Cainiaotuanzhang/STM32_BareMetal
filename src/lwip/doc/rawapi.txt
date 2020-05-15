@@ -223,11 +223,8 @@ callback function.
   
 --- Receiving TCP data
 
-TCP data reception is callback based - an application specified
-callback function is called when new data arrives. When the
-application has taken the data, it has to call the tcp_recved()
-function to indicate that TCP can advertise increase the receive
-window.
+TCP数据接收基于回调-新数据到达时,将调用应用程序指定的回调函数. 
+应用程序获取数据后,必须调用tcp_recved()函数来指示TCP可以通告增加接收窗口.
 
 - void tcp_recv(struct tcp_pcb *pcb,
                 err_t (* recv)(void *arg, struct tcp_pcb *tpcb,

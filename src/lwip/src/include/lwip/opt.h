@@ -937,8 +937,9 @@
 #endif
 
 /**
- * TCP_QUEUE_OOSEQ==1: TCP will queue segments that arrive out of order.
- * Define to 0 if your device is low on memory.
+ TCP_QUEUE_OOSEQ == 1:
+ TCP将对乱序到达的段进行排队.
+ 如果设备内存不足,则定义为0.
  */
 #ifndef TCP_QUEUE_OOSEQ
 #define TCP_QUEUE_OOSEQ                 (LWIP_TCP)
@@ -1017,7 +1018,7 @@
 #endif
 
 /**
- * TCP_LISTEN_BACKLOG: Enable the backlog option for tcp listen pcb.
+ * TCP_LISTEN_BACKLOG: 为tcp listen pcb启用backlog选项.
  */
 #ifndef TCP_LISTEN_BACKLOG
 #define TCP_LISTEN_BACKLOG              0
@@ -1033,25 +1034,22 @@
 #endif
 
 /**
- * TCP_OVERSIZE: The maximum number of bytes that tcp_write may
- * allocate ahead of time in an attempt to create shorter pbuf chains
- * for transmission. The meaningful range is 0 to TCP_MSS. Some
- * suggested values are:
- *
- * 0:         Disable oversized allocation. Each tcp_write() allocates a new
-              pbuf (old behaviour).
- * 1:         Allocate size-aligned pbufs with minimal excess. Use this if your
- *            scatter-gather DMA requires aligned fragments.
- * 128:       Limit the pbuf/memory overhead to 20%.
- * TCP_MSS:   Try to create unfragmented TCP packets.
- * TCP_MSS/4: Try to create 4 fragments or less per TCP packet.
+ TCP_OVERSIZE:tcp_write可能会提前分配的最大字节数,以尝试创建较短的pbuf链进行传输. 有意义的范围是0到TCP_MSS.
+ 
+ 一些建议的值是:
+ 0:禁用超大分配. 每个tcp_write()分配一个新的pbuf(旧行为).
+ 1:以最小的剩余量分配大小对齐的pbuf. 如果您的分散收集DMA需要对齐的片段,请使用此选项.
+ 128:将pbuf /内存开销限制为20％.
+ 
+ TCP_MSS:尝试创建未分段的TCP数据包.
+ TCP_MSS / 4:尝试为每个TCP数据包创建4个或更少的片段.
  */
 #ifndef TCP_OVERSIZE
 #define TCP_OVERSIZE                    TCP_MSS
 #endif
 
 /**
- * LWIP_TCP_TIMESTAMPS==1: support the TCP timestamp option.
+ * LWIP_TCP_TIMESTAMPS==1: 支持TCP时间戳选项.
  */
 #ifndef LWIP_TCP_TIMESTAMPS
 #define LWIP_TCP_TIMESTAMPS             0
@@ -1146,11 +1144,10 @@
 #endif
 
 /**
- * LWIP_NETIF_HWADDRHINT==1: Cache link-layer-address hints (e.g. table
- * indices) in struct netif. TCP and UDP can make use of this to prevent
- * scanning the ARP table for every sent packet. While this is faster for big
- * ARP tables or many concurrent connections, it might be counterproductive
- * if you have a tiny ARP table or if there never are concurrent connections.
+ 在struct netif中缓存链接层地址提示(例如表索引).
+
+ TCP和UDP可以利用它来防止扫描每个已发送数据包的ARP表.
+ 虽然这对于较大的ARP表或许多并发连接来说速度更快,但是如果您的ARP表很小或从不存在并发连接,则可能适得其反.
  */
 #ifndef LWIP_NETIF_HWADDRHINT
 #define LWIP_NETIF_HWADDRHINT           0

@@ -373,8 +373,7 @@ dropped:
  * @note the segment which arrived is saved in global variables, therefore only the pcb
  *       involved is passed as a parameter to this function
  */
-static err_t
-tcp_listen_input(struct tcp_pcb_listen *pcb)
+static err_t tcp_listen_input(struct tcp_pcb_listen *pcb)
 {
   struct tcp_pcb *npcb;
   err_t rc;

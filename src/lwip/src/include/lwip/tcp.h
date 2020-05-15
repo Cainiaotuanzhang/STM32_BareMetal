@@ -154,27 +154,28 @@ enum tcp_state {
  * members common to struct tcp_pcb and struct tcp_listen_pcb
  */
 #define TCP_PCB_COMMON(type) \
-  type *next; /* for the linked list */ \
-  void *callback_arg; \
-  /* the accept callback for listen- and normal pcbs, if LWIP_CALLBACK_API */ \
-  DEF_ACCEPT_CALLBACK \
-  enum tcp_state state; /* TCP state */ \
-  u8_t prio; \
-  /* ports are in host byte order */ \
-  u16_t local_port
+    type *next; /* for the linked list */ \
+    void *callback_arg; \
+    /* the accept callback for listen- and normal pcbs, if LWIP_CALLBACK_API */ \
+    DEF_ACCEPT_CALLBACK \
+    enum tcp_state state; /* TCP state */ \
+    u8_t prio; \
+    /* ports are in host byte order */ \
+    u16_t local_port
 
 
-/* the TCP protocol control block */
+/* TCP协议控制块 */
 struct tcp_pcb {
-/** common PCB members */
-  IP_PCB;
-/** protocol specific PCB members */
-  TCP_PCB_COMMON(struct tcp_pcb);
+    /** PCB通用成员 */
+    IP_PCB;
 
-  /* ports are in host byte order */
-  u16_t remote_port;
-  
-  u8_t flags;
+    /** 协议特定的PCB成员 */
+    TCP_PCB_COMMON(struct tcp_pcb);
+
+    /* ports are in host byte order */
+    u16_t remote_port;
+
+    u8_t flags;
 #define TF_ACK_DELAY   ((u8_t)0x01U)   /* Delayed ACK. */
 #define TF_ACK_NOW     ((u8_t)0x02U)   /* Immediate ACK. */
 #define TF_INFR        ((u8_t)0x04U)   /* In fast recovery. */
@@ -184,101 +185,86 @@ struct tcp_pcb {
 #define TF_NODELAY     ((u8_t)0x40U)   /* Disable Nagle algorithm */
 #define TF_NAGLEMEMERR ((u8_t)0x80U)   /* nagle enabled, memerr, try to output to prevent delayed ACK to happen */
 
-  /* the rest of the fields are in host byte order
-     as we have to do some math with them */
+    /* 其余字段按主机字节顺序排列,因为我们必须对它们进行一些数学运算 */
 
-  /* Timers */
-  u8_t polltmr, pollinterval;
-  u8_t last_timer;
-  u32_t tmr;
+    /* Timers */
+    u8_t polltmr, pollinterval;
+    u8_t last_timer;
+    u32_t tmr;
 
-  /* receiver variables */
-  u32_t rcv_nxt;   /* next seqno expected */
-  u16_t rcv_wnd;   /* receiver window available */
-  u16_t rcv_ann_wnd; /* receiver window to announce */
-  u32_t rcv_ann_right_edge; /* announced right edge of window */
+    /* receiver variables */
+    u32_t rcv_nxt;   /* next seqno expected */
+    u16_t rcv_wnd;   /* receiver window available */
+    u16_t rcv_ann_wnd; /* receiver window to announce */
+    u32_t rcv_ann_right_edge; /* announced right edge of window */
 
-  /* Retransmission timer. */
-  s16_t rtime;
+    /* Retransmission timer. */
+    s16_t rtime;
 
-  u16_t mss;   /* maximum segment size */
+    u16_t mss;   /* maximum segment size */
 
-  /* RTT (round trip time) estimation variables */
-  u32_t rttest; /* RTT estimate in 500ms ticks */
-  u32_t rtseq;  /* sequence number being timed */
-  s16_t sa, sv; /* @todo document this */
+    /* RTT (round trip time) estimation variables */
+    u32_t rttest; /* RTT estimate in 500ms ticks */
+    u32_t rtseq;  /* sequence number being timed */
+    s16_t sa, sv; /* @todo document this */
 
-  s16_t rto;    /* retransmission time-out */
-  u8_t nrtx;    /* number of retransmissions */
+    s16_t rto;    /* 重传超时 */
+    u8_t nrtx;    /* number of retransmissions */
 
-  /* fast retransmit/recovery */
-  u8_t dupacks;
-  u32_t lastack; /* Highest acknowledged seqno. */
+    /* fast retransmit/recovery */
+    u8_t dupacks;
+    u32_t lastack; /* Highest acknowledged seqno. */
 
-  /* congestion avoidance/control variables */
-  u16_t cwnd;
-  u16_t ssthresh;
+    /* congestion avoidance/control variables */
+    u16_t cwnd;
+    u16_t ssthresh;
 
-  /* sender variables */
-  u32_t snd_nxt;   /* next new seqno to be sent */
-  u32_t snd_wl1, snd_wl2; /* Sequence and acknowledgement numbers of last
-                             window update. */
-  u32_t snd_lbb;       /* Sequence number of next byte to be buffered. */
-  u16_t snd_wnd;   /* sender window */
-  u16_t snd_wnd_max; /* the maximum sender window announced by the remote host */
+    /* sender variables */
+    u32_t snd_nxt;   /* next new seqno to be sent */
+    u32_t snd_wl1, snd_wl2; /* Sequence and acknowledgement numbers of last
+                 window update. */
+    u32_t snd_lbb;       /* Sequence number of next byte to be buffered. */
+    u16_t snd_wnd;   /* sender window */
+    u16_t snd_wnd_max; /* the maximum sender window announced by the remote host */
 
-  u16_t acked;
+    u16_t acked;
 
-  u16_t snd_buf;   /* Available buffer space for sending (in bytes). */
+    u16_t snd_buf;   /* Available buffer space for sending (in bytes). */
 #define TCP_SNDQUEUELEN_OVERFLOW (0xffffU-3)
-  u16_t snd_queuelen; /* Available buffer space for sending (in tcp_segs). */
+    u16_t snd_queuelen; /* Available buffer space for sending (in tcp_segs). */
 
-#if TCP_OVERSIZE
-  /* Extra bytes available at the end of the last pbuf in unsent. */
-  u16_t unsent_oversize;
-#endif /* TCP_OVERSIZE */ 
+    /* 最后一个pbuf末尾的多余字节未发送. */
+    u16_t unsent_oversize;
 
-  /* These are ordered by sequence number: */
-  struct tcp_seg *unsent;   /* Unsent (queued) segments. */
-  struct tcp_seg *unacked;  /* Sent but unacknowledged segments. */
-#if TCP_QUEUE_OOSEQ  
-  struct tcp_seg *ooseq;    /* Received out of sequence segments. */
-#endif /* TCP_QUEUE_OOSEQ */
+    /* 这些按序列号排序: */
+    struct tcp_seg *unsent;   /* 未发送(排队)的段. */
+    struct tcp_seg *unacked;  /* 已发送但未确认的段 */
+    struct tcp_seg *ooseq;    /* 收到乱序片段. */
 
-  struct pbuf *refused_data; /* Data previously received but not yet taken by upper layer */
+    struct pbuf *refused_data; /* 先前已接收但尚未被上层获取的数据 */
 
-#if LWIP_CALLBACK_API
-  /* Function to be called when more send buffer space is available. */
-  tcp_sent_fn sent;
-  /* Function to be called when (in-sequence) data has arrived. */
-  tcp_recv_fn recv;
-  /* Function to be called when a connection has been set up. */
-  tcp_connected_fn connected;
-  /* Function which is called periodically. */
-  tcp_poll_fn poll;
-  /* Function to be called whenever a fatal error occurs. */
-  tcp_err_fn errf;
-#endif /* LWIP_CALLBACK_API */
+    //默认事件直接调用PCB回调函数
+    /* 有更多发送缓冲区空间时要调用的函数. */
+    tcp_sent_fn sent;
+    /* (按顺序)数据到达时要调用的函数. */
+    tcp_recv_fn recv;
+    /* 建立连接后要调用的函数. */
+    tcp_connected_fn connected;
+    /* 定期调用的功能. */
+    tcp_poll_fn poll;
+    /* 发生致命错误时将调用的函数. */
+    tcp_err_fn errf;
 
-#if LWIP_TCP_TIMESTAMPS
-  u32_t ts_lastacksent;
-  u32_t ts_recent;
-#endif /* LWIP_TCP_TIMESTAMPS */
+    /* idle time before KEEPALIVE is sent */
+    u32_t keep_idle;
 
-  /* idle time before KEEPALIVE is sent */
-  u32_t keep_idle;
-#if LWIP_TCP_KEEPALIVE
-  u32_t keep_intvl;
-  u32_t keep_cnt;
-#endif /* LWIP_TCP_KEEPALIVE */
-  
-  /* Persist timer counter */
-  u8_t persist_cnt;
-  /* Persist timer back-off */
-  u8_t persist_backoff;
+    /* 持续计时器 */
+    u8_t persist_cnt;
+    /* 持续计时器退避 */
+    u8_t persist_backoff;
 
-  /* KEEPALIVE counter */
-  u8_t keep_cnt_sent;
+    /* KEEPALIVE 计数器 */
+    u8_t keep_cnt_sent;
 };
 
 struct tcp_pcb_listen {  

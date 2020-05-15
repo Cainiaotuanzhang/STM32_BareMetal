@@ -69,26 +69,23 @@ extern "C" {
 #define IP_PCB_ADDRHINT
 #endif /* LWIP_NETIF_HWADDRHINT */
 
-/* This is the common part of all PCB types. It needs to be at the
-   beginning of a PCB type definition. It is located here so that
-   changes to this common part are made in one location instead of
-   having to change all PCB structs. */
+/* 这是所有PCB类型的通用部分. 它必须在PCB类型定义的开头. 
+它位于此处,因此可以在一个位置中更改此公共部分,
+而不必更改所有PCB结构. */
 #define IP_PCB \
-  /* ip addresses in network byte order */ \
-  ip_addr_t local_ip; \
-  ip_addr_t remote_ip; \
-   /* Socket options */  \
-  u8_t so_options;      \
-   /* Type Of Service */ \
-  u8_t tos;              \
-  /* Time To Live */     \
-  u8_t ttl               \
-  /* link layer address resolution hint */ \
-  IP_PCB_ADDRHINT
+    /* ip addresses in network byte order */ \
+    ip_addr_t local_ip; \
+    ip_addr_t remote_ip; \
+    /* Socket options */  \
+    u8_t so_options;      \
+    /* Type Of Service */ \
+    u8_t tos;              \
+    /* Time To Live */     \
+    u8_t ttl               \
 
 struct ip_pcb {
-/* Common members of all PCB types */
-  IP_PCB;
+    /* Common members of all PCB types */
+    IP_PCB;
 };
 
 /*

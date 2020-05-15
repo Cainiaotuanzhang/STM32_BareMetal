@@ -109,9 +109,10 @@ struct tcp_pcb *tcp_tw_pcbs;
 
 #define NUM_TCP_PCB_LISTS               4
 #define NUM_TCP_PCB_LISTS_NO_TIME_WAIT  3
-/** An array with all (non-temporary) PCB lists, mainly used for smaller code size */
+
+/** 具有所有(非临时)PCB列表的阵列,主要用于较小的代码大小 */
 struct tcp_pcb ** const tcp_pcb_lists[] = {&tcp_listen_pcbs.pcbs, &tcp_bound_pcbs,
-  &tcp_active_pcbs, &tcp_tw_pcbs};
+                                            &tcp_active_pcbs, &tcp_tw_pcbs};
 
 /** Only used for temporary storage. */
 struct tcp_pcb *tcp_tmp_pcb;
@@ -414,76 +415,59 @@ tcp_abort(struct tcp_pcb *pcb)
 }
 
 /**
- * Binds the connection to a local portnumber and IP address. If the
- * IP address is not given (i.e., ipaddr == NULL), the IP address of
- * the outgoing network interface is used instead.
- *
- * @param pcb the tcp_pcb to bind (no check is done whether this pcb is
- *        already bound!)
- * @param ipaddr the local ip address to bind to (use IP_ADDR_ANY to bind
- *        to any local address
- * @param port the local port to bind to
- * @return ERR_USE if the port is already in use
- *         ERR_VAL if bind failed because the PCB is not in a valid state
- *         ERR_OK if bound
+    将连接绑定到本地端口号和IP地址.
+    如果未提供IP地址(即,ipaddr == NULL),则使用传出网络接口的IP地址.
+    @param pcb将tcp_pcb绑定(不检查此pcb是否已绑定!)
+    @param ipaddr绑定到的本地IP地址(使用IP_ADDR_ANY绑定到任何本地地址)
+    @param port本地端口绑定
+    @return ERR_USE 如果端口已在使用中
+            ERR_VAL 如果由于PCB处于无效状态而绑定失败
+            ERR_OK 如果已绑定
  */
-err_t
-tcp_bind(struct tcp_pcb *pcb, ip_addr_t *ipaddr, u16_t port)
+err_t tcp_bind(struct tcp_pcb *pcb, ip_addr_t *ipaddr, u16_t port)
 {
-  int i;
-  int max_pcb_list = NUM_TCP_PCB_LISTS;
-  struct tcp_pcb *cpcb;
+    int i;
+    int max_pcb_list = NUM_TCP_PCB_LISTS;
+    struct tcp_pcb *cpcb;
 
-  LWIP_ERROR("tcp_bind: can only bind in state CLOSED", pcb->state == CLOSED, return ERR_VAL);
-
-#if SO_REUSE
-  /* Unless the REUSEADDR flag is set,
-     we have to check the pcbs in TIME-WAIT state, also.
-     We do not dump TIME_WAIT pcb's; they can still be matched by incoming
-     packets using both local and remote IP addresses and ports to distinguish.
-   */
-  if (ip_get_option(pcb, SOF_REUSEADDR)) {
-    max_pcb_list = NUM_TCP_PCB_LISTS_NO_TIME_WAIT;
-  }
-#endif /* SO_REUSE */
-
-  if (port == 0) {
-    port = tcp_new_port();
-    if (port == 0) {
-      return ERR_BUF;
-    }
-  }
-
-  /* Check if the address already is in use (on all lists) */
-  for (i = 0; i < max_pcb_list; i++) {
-    for(cpcb = *tcp_pcb_lists[i]; cpcb != NULL; cpcb = cpcb->next) {
-      if (cpcb->local_port == port) {
-#if SO_REUSE
-        /* Omit checking for the same port if both pcbs have REUSEADDR set.
-           For SO_REUSEADDR, the duplicate-check for a 5-tuple is done in
-           tcp_connect. */
-        if (!ip_get_option(pcb, SOF_REUSEADDR) ||
-            !ip_get_option(cpcb, SOF_REUSEADDR))
-#endif /* SO_REUSE */
+    if (port == 0)
+    {
+        port = tcp_new_port();
+        if (port == 0)
         {
-          if (ip_addr_isany(&(cpcb->local_ip)) ||
-              ip_addr_isany(ipaddr) ||
-              ip_addr_cmp(&(cpcb->local_ip), ipaddr)) {
-            return ERR_USE;
-          }
+            return ERR_BUF;
         }
-      }
     }
-  }
 
-  if (!ip_addr_isany(ipaddr)) {
-    pcb->local_ip = *ipaddr;
-  }
-  pcb->local_port = port;
-  TCP_REG(&tcp_bound_pcbs, pcb);
-  LWIP_DEBUGF(TCP_DEBUG, ("tcp_bind: bind to port %"U16_F"\n", port));
-  return ERR_OK;
+    /* 检查地址是否已被使用(在所有列表中) */
+    for (i = 0; i < max_pcb_list; i++)
+    {
+        for (cpcb = *tcp_pcb_lists[i]; cpcb != NULL; cpcb = cpcb->next)
+        {
+            if (cpcb->local_port == port)
+            {
+                if (ip_addr_isany(&(cpcb->local_ip)) ||
+                    ip_addr_isany(ipaddr) ||
+                    ip_addr_cmp(&(cpcb->local_ip), ipaddr))
+                {
+                    return ERR_USE;
+                }
+            }
+        }
+    }
+
+    if (!ip_addr_isany(ipaddr))
+    {
+        pcb->local_ip = *ipaddr;
+    }
+
+    pcb->local_port = port;
+
+    TCP_REG(&tcp_bound_pcbs, pcb);
+
+    return ERR_OK;
 }
+
 #if LWIP_CALLBACK_API
 /**
  * Default accept callback if no accept callback is specified by the user.
@@ -500,72 +484,50 @@ tcp_accept_null(void *arg, struct tcp_pcb *pcb, err_t err)
 #endif /* LWIP_CALLBACK_API */
 
 /**
- * Set the state of the connection to be LISTEN, which means that it
- * is able to accept incoming connections. The protocol control block
- * is reallocated in order to consume less memory. Setting the
- * connection to LISTEN is an irreversible process.
- *
- * @param pcb the original tcp_pcb
- * @param backlog the incoming connections queue limit
- * @return tcp_pcb used for listening, consumes less memory.
- *
- * @note The original tcp_pcb is freed. This function therefore has to be
- *       called like this:
- *             tpcb = tcp_listen(tpcb);
+    将连接的状态设置为LISTEN,这意味着它能够接受传入的连接.
+    重新分配协议控制块,以消耗更少的内存.将连接设置为LISTEN是不可逆的过程.
+    @param pcb原始的tcp_pcb
+    @param积压传入连接队列限制
+    @return tcp_pcb用于侦听,消耗更少的内存.
+    @note原始tcp_pcb已释放. 因此,必须像这样调用该函数:tpcb = tcp_listen(tpcb);
  */
-struct tcp_pcb *
-tcp_listen_with_backlog(struct tcp_pcb *pcb, u8_t backlog)
+struct tcp_pcb *tcp_listen_with_backlog(struct tcp_pcb *pcb, u8_t backlog)
 {
-  struct tcp_pcb_listen *lpcb;
+    struct tcp_pcb_listen *lpcb;
 
-  LWIP_UNUSED_ARG(backlog);
-  LWIP_ERROR("tcp_listen: pcb already connected", pcb->state == CLOSED, return NULL);
+    LWIP_UNUSED_ARG(backlog);   //ZHENXIAOBO:看下.结合TCP_LISTEN_BACKLOG
 
-  /* already listening? */
-  if (pcb->state == LISTEN) {
-    return pcb;
-  }
-#if SO_REUSE
-  if (ip_get_option(pcb, SOF_REUSEADDR)) {
-    /* Since SOF_REUSEADDR allows reusing a local address before the pcb's usage
-       is declared (listen-/connection-pcb), we have to make sure now that
-       this port is only used once for every local IP. */
-    for(lpcb = tcp_listen_pcbs.listen_pcbs; lpcb != NULL; lpcb = lpcb->next) {
-      if (lpcb->local_port == pcb->local_port) {
-        if (ip_addr_cmp(&lpcb->local_ip, &pcb->local_ip)) {
-          /* this address/port is already used */
-          return NULL;
-        }
-      }
+    /* already listening? */
+    if (pcb->state == LISTEN)
+    {
+        return pcb;
     }
-  }
-#endif /* SO_REUSE */
-  lpcb = (struct tcp_pcb_listen *)memp_malloc(MEMP_TCP_PCB_LISTEN);
-  if (lpcb == NULL) {
-    return NULL;
-  }
-  lpcb->callback_arg = pcb->callback_arg;
-  lpcb->local_port = pcb->local_port;
-  lpcb->state = LISTEN;
-  lpcb->prio = pcb->prio;
-  lpcb->so_options = pcb->so_options;
-  ip_set_option(lpcb, SOF_ACCEPTCONN);
-  lpcb->ttl = pcb->ttl;
-  lpcb->tos = pcb->tos;
-  ip_addr_copy(lpcb->local_ip, pcb->local_ip);
-  if (pcb->local_port != 0) {
-    TCP_RMV(&tcp_bound_pcbs, pcb);
-  }
-  memp_free(MEMP_TCP_PCB, pcb);
-#if LWIP_CALLBACK_API
-  lpcb->accept = tcp_accept_null;
-#endif /* LWIP_CALLBACK_API */
-#if TCP_LISTEN_BACKLOG
-  lpcb->accepts_pending = 0;
-  lpcb->backlog = (backlog ? backlog : 1);
-#endif /* TCP_LISTEN_BACKLOG */
-  TCP_REG(&tcp_listen_pcbs.pcbs, (struct tcp_pcb *)lpcb);
-  return (struct tcp_pcb *)lpcb;
+
+    lpcb = (struct tcp_pcb_listen *)memp_malloc(MEMP_TCP_PCB_LISTEN);
+    if (lpcb == NULL)
+    {
+        return NULL;
+    }
+
+    lpcb->callback_arg = pcb->callback_arg;
+    lpcb->local_port = pcb->local_port;
+    lpcb->state = LISTEN;
+    lpcb->prio = pcb->prio;
+    lpcb->so_options = pcb->so_options;
+    ip_set_option(lpcb, SOF_ACCEPTCONN);
+    lpcb->ttl = pcb->ttl;
+    lpcb->tos = pcb->tos;
+    ip_addr_copy(lpcb->local_ip, pcb->local_ip);
+    if (pcb->local_port != 0)
+    {
+        TCP_RMV(&tcp_bound_pcbs, pcb);
+    }
+    memp_free(MEMP_TCP_PCB, pcb);
+    lpcb->accept = tcp_accept_null;
+
+    TCP_REG(&tcp_listen_pcbs.pcbs, (struct tcp_pcb *)lpcb);
+
+    return (struct tcp_pcb *)lpcb;
 }
 
 /** 
@@ -1267,100 +1229,89 @@ tcp_kill_timewait(void)
 }
 
 /**
- * Allocate a new tcp_pcb structure.
- *
- * @param prio priority for the new pcb
- * @return a new tcp_pcb that initially is in state CLOSED
+    分配新的tcp_pcb结构。
+
+    新pcb的param prio优先级
+    返回初始状态为CLOSED的新tcp_pcb
  */
-struct tcp_pcb *
-tcp_alloc(u8_t prio)
+struct tcp_pcb *tcp_alloc(u8_t prio)
 {
-  struct tcp_pcb *pcb;
-  u32_t iss;
-  
-  pcb = (struct tcp_pcb *)memp_malloc(MEMP_TCP_PCB);
-  if (pcb == NULL) {
-    /* Try killing oldest connection in TIME-WAIT. */
-    LWIP_DEBUGF(TCP_DEBUG, ("tcp_alloc: killing off oldest TIME-WAIT connection\n"));
-    tcp_kill_timewait();
-    /* Try to allocate a tcp_pcb again. */
+    struct tcp_pcb *pcb;
+    u32_t iss;
+
     pcb = (struct tcp_pcb *)memp_malloc(MEMP_TCP_PCB);
-    if (pcb == NULL) {
-      /* Try killing active connections with lower priority than the new one. */
-      LWIP_DEBUGF(TCP_DEBUG, ("tcp_alloc: killing connection with prio lower than %d\n", prio));
-      tcp_kill_prio(prio);
-      /* Try to allocate a tcp_pcb again. */
-      pcb = (struct tcp_pcb *)memp_malloc(MEMP_TCP_PCB);
-      if (pcb != NULL) {
-        /* adjust err stats: memp_malloc failed twice before */
-        MEMP_STATS_DEC(err, MEMP_TCP_PCB);
-      }
+    if (pcb == NULL)
+    {
+        /* 尝试在TIME-WAIT中杀死最早的连接. */
+        tcp_kill_timewait();
+
+        /* 尝试再次分配tcp_pcb. */
+        pcb = (struct tcp_pcb *)memp_malloc(MEMP_TCP_PCB);
+
+        if (pcb == NULL)
+        {
+            /* 尝试杀死优先级比新连接低的活动连接. */
+            tcp_kill_prio(prio);
+
+            /* 尝试再次分配tcp_pcb. */
+            pcb = (struct tcp_pcb *)memp_malloc(MEMP_TCP_PCB);
+            if (pcb != NULL)
+            {
+                /* 调整错误状态:memp_malloc两次失败 */
+            }
+        }
+
+        if (pcb != NULL)
+        {
+            /* 调整错误状态:timewait PCB已释放 */
+        }
     }
-    if (pcb != NULL) {
-      /* adjust err stats: timewait PCB was freed above */
-      MEMP_STATS_DEC(err, MEMP_TCP_PCB);
+
+    if (pcb != NULL)
+    {
+        memset(pcb, 0, sizeof(struct tcp_pcb));
+        pcb->prio = prio;
+        pcb->snd_buf = TCP_SND_BUF;
+        pcb->snd_queuelen = 0;
+        pcb->rcv_wnd = TCP_WND;
+        pcb->rcv_ann_wnd = TCP_WND;
+        pcb->tos = 0;
+        pcb->ttl = TCP_TTL;
+        /*  作为初始发送MSS,我们使用TCP_MSS,但将其限制为536.
+            收到MSS选项时,发送MSS会更新. */
+        pcb->mss = (TCP_MSS > 536) ? 536 : TCP_MSS;
+        pcb->rto = 3000 / TCP_SLOW_INTERVAL;
+        pcb->sa = 0;
+        pcb->sv = 3000 / TCP_SLOW_INTERVAL;
+        pcb->rtime = -1;
+        pcb->cwnd = 1;
+        iss = tcp_next_iss();
+        pcb->snd_wl2 = iss;
+        pcb->snd_nxt = iss;
+        pcb->lastack = iss;
+        pcb->snd_lbb = iss;
+        pcb->tmr = tcp_ticks;
+        pcb->last_timer = tcp_timer_ctr;
+        pcb->polltmr = 0;
+        pcb->recv = tcp_recv_null;
+
+        /* Init KEEPALIVE timer */
+        pcb->keep_idle  = TCP_KEEPIDLE_DEFAULT;
+        pcb->keep_cnt_sent = 0;
     }
-  }
-  if (pcb != NULL) {
-    memset(pcb, 0, sizeof(struct tcp_pcb));
-    pcb->prio = prio;
-    pcb->snd_buf = TCP_SND_BUF;
-    pcb->snd_queuelen = 0;
-    pcb->rcv_wnd = TCP_WND;
-    pcb->rcv_ann_wnd = TCP_WND;
-    pcb->tos = 0;
-    pcb->ttl = TCP_TTL;
-    /* As initial send MSS, we use TCP_MSS but limit it to 536.
-       The send MSS is updated when an MSS option is received. */
-    pcb->mss = (TCP_MSS > 536) ? 536 : TCP_MSS;
-    pcb->rto = 3000 / TCP_SLOW_INTERVAL;
-    pcb->sa = 0;
-    pcb->sv = 3000 / TCP_SLOW_INTERVAL;
-    pcb->rtime = -1;
-    pcb->cwnd = 1;
-    iss = tcp_next_iss();
-    pcb->snd_wl2 = iss;
-    pcb->snd_nxt = iss;
-    pcb->lastack = iss;
-    pcb->snd_lbb = iss;   
-    pcb->tmr = tcp_ticks;
-    pcb->last_timer = tcp_timer_ctr;
-
-    pcb->polltmr = 0;
-
-#if LWIP_CALLBACK_API
-    pcb->recv = tcp_recv_null;
-#endif /* LWIP_CALLBACK_API */  
-    
-    /* Init KEEPALIVE timer */
-    pcb->keep_idle  = TCP_KEEPIDLE_DEFAULT;
-    
-#if LWIP_TCP_KEEPALIVE
-    pcb->keep_intvl = TCP_KEEPINTVL_DEFAULT;
-    pcb->keep_cnt   = TCP_KEEPCNT_DEFAULT;
-#endif /* LWIP_TCP_KEEPALIVE */
-
-    pcb->keep_cnt_sent = 0;
-  }
-  return pcb;
+    return pcb;
 }
 
 /**
- * Creates a new TCP protocol control block but doesn't place it on
- * any of the TCP PCB lists.
- * The pcb is not put on any list until binding using tcp_bind().
- *
- * @internal: Maybe there should be a idle TCP PCB list where these
- * PCBs are put on. Port reservation using tcp_bind() is implemented but
- * allocated pcbs that are not bound can't be killed automatically if wanting
- * to allocate a pcb with higher prio (@see tcp_kill_prio())
- *
- * @return a new tcp_pcb that initially is in state CLOSED
+    创建一个新的TCP协议控制块,但不将其放置在任何TCP PCB列表中.
+    在使用tcp_bind()进行绑定之前,不会将pcb放在任何列表中.
+    @内部:也许应该有一个闲置的TCP PCB列表,这些PCB放在其中.
+    实现了使用tcp_bind()进行端口保留,但是如果要分配具有更高prio的pcb,则未绑定的未绑定pcb不会自动被杀死(@tcp_kill_prio())
+    @返回最初处于关闭状态的新tcp_pcb
  */
-struct tcp_pcb *
-tcp_new(void)
+struct tcp_pcb *tcp_new(void)
 {
-  return tcp_alloc(TCP_PRIO_NORMAL);
+    return tcp_alloc(TCP_PRIO_NORMAL);
 }
 
 /**
@@ -1380,11 +1331,9 @@ tcp_arg(struct tcp_pcb *pcb, void *arg)
 #if LWIP_CALLBACK_API
 
 /**
- * Used to specify the function that should be called when a TCP
- * connection receives data.
- *
- * @param pcb tcp_pcb to set the recv callback
- * @param recv callback function to call for this pcb when data is received
+ * 用于指定TCP连接接收数据时应调用的函数.
+ * @param pcb tcp_pcb设置recv回调
+ * @param recv回调函数,在收到数据时调用此pcb
  */ 
 void
 tcp_recv(struct tcp_pcb *pcb, tcp_recv_fn recv)

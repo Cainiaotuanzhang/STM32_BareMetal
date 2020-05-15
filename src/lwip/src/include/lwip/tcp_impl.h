@@ -114,7 +114,7 @@ err_t            tcp_process_refused_data(struct tcp_pcb *pcb);
 #define TCP_HLEN 20
 
 #ifndef TCP_TMR_INTERVAL
-#define TCP_TMR_INTERVAL       250  /* The TCP timer interval in milliseconds. */
+#define TCP_TMR_INTERVAL       250  /* TCP计时器间隔(以毫秒为单位). */
 #endif /* TCP_TMR_INTERVAL */
 
 #ifndef TCP_FAST_INTERVAL
@@ -122,7 +122,7 @@ err_t            tcp_process_refused_data(struct tcp_pcb *pcb);
 #endif /* TCP_FAST_INTERVAL */
 
 #ifndef TCP_SLOW_INTERVAL
-#define TCP_SLOW_INTERVAL      (2*TCP_TMR_INTERVAL)  /* the coarse grained timeout in milliseconds */
+#define TCP_SLOW_INTERVAL      (2*TCP_TMR_INTERVAL)  /* 粗粒度超时(以毫秒为单位) */
 #endif /* TCP_SLOW_INTERVAL */
 
 #define TCP_FIN_WAIT_TIMEOUT 20000 /* milliseconds */
@@ -321,49 +321,18 @@ extern struct tcp_pcb *tcp_tw_pcbs;      /* List of all TCP PCBs in TIME-WAIT. *
 
 extern struct tcp_pcb *tcp_tmp_pcb;      /* Only used for temporary storage. */
 
-/* Axioms about the above lists:   
-   1) Every TCP PCB that is not CLOSED is in one of the lists.
-   2) A PCB is only in one of the lists.
-   3) All PCBs in the tcp_listen_pcbs list is in LISTEN state.
-   4) All PCBs in the tcp_tw_pcbs list is in TIME-WAIT state.
+/*
+上面列出的公理:
+    1) 每个未关闭的TCP PCB都在列表之一中.
+    2) PCB仅在列表之一中.
+    3) tcp_listen_pcbs列表中的所有PCB都处于LISTEN状态.
+    4) tcp_tw_pcbs列表中的所有PCB都处于TIME-WAIT状态.
+
+定义两个宏,TCP_REG和TCP_RMV,分别将TCP PCB注册到PCB列表或从列表中删除PCB.
 */
-/* Define two macros, TCP_REG and TCP_RMV that registers a TCP PCB
-   with a PCB list or removes a PCB from a list, respectively. */
 #ifndef TCP_DEBUG_PCB_LISTS
 #define TCP_DEBUG_PCB_LISTS 0
 #endif
-#if TCP_DEBUG_PCB_LISTS
-#define TCP_REG(pcbs, npcb) do {\
-                            LWIP_DEBUGF(TCP_DEBUG, ("TCP_REG %p local port %d\n", (npcb), (npcb)->local_port)); \
-                            for(tcp_tmp_pcb = *(pcbs); \
-          tcp_tmp_pcb != NULL; \
-        tcp_tmp_pcb = tcp_tmp_pcb->next) { \
-                                LWIP_ASSERT("TCP_REG: already registered\n", tcp_tmp_pcb != (npcb)); \
-                            } \
-                            LWIP_ASSERT("TCP_REG: pcb->state != CLOSED", ((pcbs) == &tcp_bound_pcbs) || ((npcb)->state != CLOSED)); \
-                            (npcb)->next = *(pcbs); \
-                            LWIP_ASSERT("TCP_REG: npcb->next != npcb", (npcb)->next != (npcb)); \
-                            *(pcbs) = (npcb); \
-                            LWIP_ASSERT("TCP_RMV: tcp_pcbs sane", tcp_pcbs_sane()); \
-              tcp_timer_needed(); \
-                            } while(0)
-#define TCP_RMV(pcbs, npcb) do { \
-                            LWIP_ASSERT("TCP_RMV: pcbs != NULL", *(pcbs) != NULL); \
-                            LWIP_DEBUGF(TCP_DEBUG, ("TCP_RMV: removing %p from %p\n", (npcb), *(pcbs))); \
-                            if(*(pcbs) == (npcb)) { \
-                               *(pcbs) = (*pcbs)->next; \
-                            } else for(tcp_tmp_pcb = *(pcbs); tcp_tmp_pcb != NULL; tcp_tmp_pcb = tcp_tmp_pcb->next) { \
-                               if(tcp_tmp_pcb->next == (npcb)) { \
-                                  tcp_tmp_pcb->next = (npcb)->next; \
-                                  break; \
-                               } \
-                            } \
-                            (npcb)->next = NULL; \
-                            LWIP_ASSERT("TCP_RMV: tcp_pcbs sane", tcp_pcbs_sane()); \
-                            LWIP_DEBUGF(TCP_DEBUG, ("TCP_RMV: removed %p from %p\n", (npcb), *(pcbs))); \
-                            } while(0)
-
-#else /* LWIP_DEBUG */
 
 #define TCP_REG(pcbs, npcb)                        \
   do {                                             \
@@ -390,7 +359,8 @@ extern struct tcp_pcb *tcp_tmp_pcb;      /* Only used for temporary storage. */
     (npcb)->next = NULL;                           \
   } while(0)
 
-#endif /* LWIP_DEBUG */
+
+
 
 #define TCP_REG_ACTIVE(npcb)                       \
   do {                                             \
