@@ -9,8 +9,7 @@
 
 //#define USE_Delay     //使用默认延时函数，因此注销掉
 #ifdef USE_Delay
-#include "main.h"
-#define _eth_delay_    Delay     //Delay为用户自己提供的高精度延时函数
+//#define _eth_delay_    Delay     //Delay为用户自己提供的高精度延时函数
 #else
 #define _eth_delay_    ETH_Delay //默认的_eth_delay功能函数延时精度差
 #endif

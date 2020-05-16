@@ -213,12 +213,12 @@ void NVIC_SystemLPConfig(uint8_t LowPowerMode, FunctionalState NewState)
 }
 
 /**
-  * @brief  Configures the SysTick clock source.
-  * @param  SysTick_CLKSource: specifies the SysTick clock source.
-  *   This parameter can be one of the following values:
-  *     @arg SysTick_CLKSource_HCLK_Div8: AHB clock divided by 8 selected as SysTick clock source.
-  *     @arg SysTick_CLKSource_HCLK: AHB clock selected as SysTick clock source.
-  * @retval None
+    配置SysTick时钟源。
+    SysTick_CLKSource:指定SysTick时钟源.
+
+    *此参数可以是下列值之一:
+    @arg SysTick_CLKSource_HCLK_Div8:将AHB时钟除以8作为SysTick时钟源.
+    @arg SysTick_CLKSource_HCLK:选择AHB时钟作为SysTick时钟源.
   */
 void SysTick_CLKSourceConfig(uint32_t SysTick_CLKSource)
 {
