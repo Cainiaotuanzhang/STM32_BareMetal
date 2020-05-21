@@ -375,81 +375,71 @@ dropped:
  */
 static err_t tcp_listen_input(struct tcp_pcb_listen *pcb)
 {
-  struct tcp_pcb *npcb;
-  err_t rc;
+    struct tcp_pcb *npcb;
+    err_t rc;
 
-  if (flags & TCP_RST) {
-    /* An incoming RST should be ignored. Return. */
+    if (flags & TCP_RST)
+    {
+        /* An incoming RST should be ignored. Return. */
+        return ERR_OK;
+    }
+
+    /* In the LISTEN state, we check for incoming SYN segments,
+    creates a new PCB, and responds with a SYN|ACK. */
+    if (flags & TCP_ACK)
+    {
+        /* 对于设置了ACK标志的传入段,使用RST进行响应. */
+        tcp_rst(ackno, seqno + tcplen, ip_current_dest_addr(),
+        ip_current_src_addr(), tcphdr->dest, tcphdr->src);
+    }
+    else if (flags & TCP_SYN)
+    {
+        npcb = tcp_alloc(pcb->prio);
+        /* 如果无法创建新的PCB(可能是由于内存不足),
+        我们什么也不做,
+        但是依靠发送者将在我们有更多可用内存时重新传输SYN. */
+        if (npcb == NULL)
+        {
+            return ERR_MEM;
+        }
+
+        /* Set up the new PCB. */
+        ip_addr_copy(npcb->local_ip, current_iphdr_dest);
+        npcb->local_port = pcb->local_port;
+        ip_addr_copy(npcb->remote_ip, current_iphdr_src);
+        npcb->remote_port = tcphdr->src;
+        npcb->state = SYN_RCVD;
+        npcb->rcv_nxt = seqno + 1;
+        npcb->rcv_ann_right_edge = npcb->rcv_nxt;
+        npcb->snd_wnd = tcphdr->wnd;
+        npcb->snd_wnd_max = tcphdr->wnd;
+        npcb->ssthresh = npcb->snd_wnd;
+        npcb->snd_wl1 = seqno - 1;/* 初始化为seqno-1以强制窗口更新 */
+        npcb->callback_arg = pcb->callback_arg;
+
+        npcb->accept = pcb->accept;
+
+        /* 继承套接字选项 */
+        npcb->so_options = pcb->so_options & SOF_INHERITED;
+
+        /* 注册新的PCB,以便我们可以开始接收段为了它 */
+        TCP_REG_ACTIVE(npcb);
+
+        /* 解析SYN中的所有选项. */
+        tcp_parseopt(npcb);
+
+        npcb->mss = tcp_eff_send_mss(npcb->mss, &(npcb->remote_ip));
+
+        /* 发送SYN | ACK和MSS选项. */
+        rc = tcp_enqueue_flags(npcb, TCP_SYN | TCP_ACK);
+        if (rc != ERR_OK)
+        {
+            tcp_abandon(npcb, 0);
+            return rc;
+        }
+        return tcp_output(npcb);
+    }
     return ERR_OK;
-  }
-
-  /* In the LISTEN state, we check for incoming SYN segments,
-     creates a new PCB, and responds with a SYN|ACK. */
-  if (flags & TCP_ACK) {
-    /* For incoming segments with the ACK flag set, respond with a
-       RST. */
-    LWIP_DEBUGF(TCP_RST_DEBUG, ("tcp_listen_input: ACK in LISTEN, sending reset\n"));
-    tcp_rst(ackno, seqno + tcplen, ip_current_dest_addr(),
-      ip_current_src_addr(), tcphdr->dest, tcphdr->src);
-  } else if (flags & TCP_SYN) {
-    LWIP_DEBUGF(TCP_DEBUG, ("TCP connection request %"U16_F" -> %"U16_F".\n", tcphdr->src, tcphdr->dest));
-#if TCP_LISTEN_BACKLOG
-    if (pcb->accepts_pending >= pcb->backlog) {
-      LWIP_DEBUGF(TCP_DEBUG, ("tcp_listen_input: listen backlog exceeded for port %"U16_F"\n", tcphdr->dest));
-      return ERR_ABRT;
-    }
-#endif /* TCP_LISTEN_BACKLOG */
-    npcb = tcp_alloc(pcb->prio);
-    /* If a new PCB could not be created (probably due to lack of memory),
-       we don't do anything, but rely on the sender will retransmit the
-       SYN at a time when we have more memory available. */
-    if (npcb == NULL) {
-      LWIP_DEBUGF(TCP_DEBUG, ("tcp_listen_input: could not allocate PCB\n"));
-      TCP_STATS_INC(tcp.memerr);
-      return ERR_MEM;
-    }
-#if TCP_LISTEN_BACKLOG
-    pcb->accepts_pending++;
-#endif /* TCP_LISTEN_BACKLOG */
-    /* Set up the new PCB. */
-    ip_addr_copy(npcb->local_ip, current_iphdr_dest);
-    npcb->local_port = pcb->local_port;
-    ip_addr_copy(npcb->remote_ip, current_iphdr_src);
-    npcb->remote_port = tcphdr->src;
-    npcb->state = SYN_RCVD;
-    npcb->rcv_nxt = seqno + 1;
-    npcb->rcv_ann_right_edge = npcb->rcv_nxt;
-    npcb->snd_wnd = tcphdr->wnd;
-    npcb->snd_wnd_max = tcphdr->wnd;
-    npcb->ssthresh = npcb->snd_wnd;
-    npcb->snd_wl1 = seqno - 1;/* initialise to seqno-1 to force window update */
-    npcb->callback_arg = pcb->callback_arg;
-#if LWIP_CALLBACK_API
-    npcb->accept = pcb->accept;
-#endif /* LWIP_CALLBACK_API */
-    /* inherit socket options */
-    npcb->so_options = pcb->so_options & SOF_INHERITED;
-    /* Register the new PCB so that we can begin receiving segments
-       for it. */
-    TCP_REG_ACTIVE(npcb);
-
-    /* Parse any options in the SYN. */
-    tcp_parseopt(npcb);
-#if TCP_CALCULATE_EFF_SEND_MSS
-    npcb->mss = tcp_eff_send_mss(npcb->mss, &(npcb->remote_ip));
-#endif /* TCP_CALCULATE_EFF_SEND_MSS */
-
-    snmp_inc_tcppassiveopens();
-
-    /* Send a SYN|ACK together with the MSS option. */
-    rc = tcp_enqueue_flags(npcb, TCP_SYN | TCP_ACK);
-    if (rc != ERR_OK) {
-      tcp_abandon(npcb, 0);
-      return rc;
-    }
-    return tcp_output(npcb);
-  }
-  return ERR_OK;
 }
 
 /**

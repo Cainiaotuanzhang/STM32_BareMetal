@@ -1379,8 +1379,7 @@ tcp_err(struct tcp_pcb *pcb, tcp_err_fn err)
  * @param accept callback function to call for this pcb when LISTENing
  *        connection has been connected to another host
  */ 
-void
-tcp_accept(struct tcp_pcb *pcb, tcp_accept_fn accept)
+void tcp_accept(struct tcp_pcb *pcb, tcp_accept_fn accept)
 {
   /* This function is allowed to be called for both listen pcbs and
      connection pcbs. */

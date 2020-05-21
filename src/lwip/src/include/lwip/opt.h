@@ -955,12 +955,9 @@
 #endif
 
 /**
- * TCP_CALCULATE_EFF_SEND_MSS: "The maximum size of a segment that TCP really
- * sends, the 'effective send MSS,' MUST be the smaller of the send MSS (which
- * reflects the available reassembly buffer size at the remote host) and the
- * largest size permitted by the IP layer" (RFC 1122)
- * Setting this to 1 enables code that checks TCP_MSS against the MTU of the
- * netif used for a connection and limits the MSS if it would be too big otherwise.
+    TCP_CALCULATE_EFF_SEND_MSS:
+    "TCP实际发送的段的最大大小(有效发送MSS)必须小于发送MSS(反映远程主机上可用的重组缓冲区大小)和IP层允许的最大大小"
+    (RFC 1122)将其设置为1将启用代码,该代码根据用于连接的netif的MTU来检查TCP_MSS,并限制MSS(如果它太大).
  */
 #ifndef TCP_CALCULATE_EFF_SEND_MSS
 #define TCP_CALCULATE_EFF_SEND_MSS      1
@@ -1018,7 +1015,7 @@
 #endif
 
 /**
- * TCP_LISTEN_BACKLOG: 为tcp listen pcb启用backlog选项.
+ * TCP_LISTEN_BACKLOG: 为tcp listen pcb启用backlog选项.和Linux相关,listen(int sockfd, int backlog);
  */
 #ifndef TCP_LISTEN_BACKLOG
 #define TCP_LISTEN_BACKLOG              0

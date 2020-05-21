@@ -888,155 +888,125 @@ tcp_send_empty_ack(struct tcp_pcb *pcb)
 }
 
 /**
- * Find out what we can send and send it
- *
- * @param pcb Protocol control block for the TCP connection to send data
- * @return ERR_OK if data has been sent or nothing to send
- *         another err_t on error
+    找出我们可以发送和发送的内容
+    pcb TCP连接的协议控制块,用于发送数据
+    ERR_OK(如果已发送数据,或者没有任何内容发送错误时发送另一个err_t)
  */
-err_t
-tcp_output(struct tcp_pcb *pcb)
+err_t tcp_output(struct tcp_pcb *pcb)
 {
-  struct tcp_seg *seg, *useg;
-  u32_t wnd, snd_nxt;
-#if TCP_CWND_DEBUG
-  s16_t i = 0;
-#endif /* TCP_CWND_DEBUG */
+    struct tcp_seg *seg, *useg;
+    u32_t wnd, snd_nxt;
 
-  /* pcb->state LISTEN not allowed here */
-  LWIP_ASSERT("don't call tcp_output for listen-pcbs",
-    pcb->state != LISTEN);
-
-  /* First, check if we are invoked by the TCP input processing
-     code. If so, we do not output anything. Instead, we rely on the
-     input processing code to call us when input processing is done
-     with. */
-  if (tcp_input_pcb == pcb) {
-    return ERR_OK;
-  }
-
-  wnd = LWIP_MIN(pcb->snd_wnd, pcb->cwnd);
-
-  seg = pcb->unsent;
-
-  /* If the TF_ACK_NOW flag is set and no data will be sent (either
-   * because the ->unsent queue is empty or because the window does
-   * not allow it), construct an empty ACK segment and send it.
-   *
-   * If data is to be sent, we will just piggyback the ACK (see below).
-   */
-  if (pcb->flags & TF_ACK_NOW &&
-     (seg == NULL ||
-      ntohl(seg->tcphdr->seqno) - pcb->lastack + seg->len > wnd)) {
-     return tcp_send_empty_ack(pcb);
-  }
-
-  /* useg should point to last segment on unacked queue */
-  useg = pcb->unacked;
-  if (useg != NULL) {
-    for (; useg->next != NULL; useg = useg->next);
-  }
-
-#if TCP_OUTPUT_DEBUG
-  if (seg == NULL) {
-    LWIP_DEBUGF(TCP_OUTPUT_DEBUG, ("tcp_output: nothing to send (%p)\n",
-                                   (void*)pcb->unsent));
-  }
-#endif /* TCP_OUTPUT_DEBUG */
-#if TCP_CWND_DEBUG
-  if (seg == NULL) {
-    LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_output: snd_wnd %"U16_F
-                                 ", cwnd %"U16_F", wnd %"U32_F
-                                 ", seg == NULL, ack %"U32_F"\n",
-                                 pcb->snd_wnd, pcb->cwnd, wnd, pcb->lastack));
-  } else {
-    LWIP_DEBUGF(TCP_CWND_DEBUG, 
-                ("tcp_output: snd_wnd %"U16_F", cwnd %"U16_F", wnd %"U32_F
-                 ", effwnd %"U32_F", seq %"U32_F", ack %"U32_F"\n",
-                 pcb->snd_wnd, pcb->cwnd, wnd,
-                 ntohl(seg->tcphdr->seqno) - pcb->lastack + seg->len,
-                 ntohl(seg->tcphdr->seqno), pcb->lastack));
-  }
-#endif /* TCP_CWND_DEBUG */
-  /* data available and window allows it to be sent? */
-  while (seg != NULL &&
-         ntohl(seg->tcphdr->seqno) - pcb->lastack + seg->len <= wnd) {
-    LWIP_ASSERT("RST not expected here!", 
-                (TCPH_FLAGS(seg->tcphdr) & TCP_RST) == 0);
-    /* Stop sending if the nagle algorithm would prevent it
-     * Don't stop:
-     * - if tcp_write had a memory error before (prevent delayed ACK timeout) or
-     * - if FIN was already enqueued for this PCB (SYN is always alone in a segment -
-     *   either seg->next != NULL or pcb->unacked == NULL;
-     *   RST is no sent using tcp_write/tcp_output.
-     */
-    if((tcp_do_output_nagle(pcb) == 0) &&
-      ((pcb->flags & (TF_NAGLEMEMERR | TF_FIN)) == 0)){
-      break;
-    }
-#if TCP_CWND_DEBUG
-    LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_output: snd_wnd %"U16_F", cwnd %"U16_F", wnd %"U32_F", effwnd %"U32_F", seq %"U32_F", ack %"U32_F", i %"S16_F"\n",
-                            pcb->snd_wnd, pcb->cwnd, wnd,
-                            ntohl(seg->tcphdr->seqno) + seg->len -
-                            pcb->lastack,
-                            ntohl(seg->tcphdr->seqno), pcb->lastack, i));
-    ++i;
-#endif /* TCP_CWND_DEBUG */
-
-    pcb->unsent = seg->next;
-
-    if (pcb->state != SYN_SENT) {
-      TCPH_SET_FLAG(seg->tcphdr, TCP_ACK);
-      pcb->flags &= ~(TF_ACK_DELAY | TF_ACK_NOW);
+    /* 首先,检查是否由TCP输入处理代码调用了我们.
+    如果是这样,我们什么都不输出.
+    相反,完成输入处理后,我们将依靠输入处理代码来调用我们.*/
+    if (tcp_input_pcb == pcb)
+    {
+        return ERR_OK;
     }
 
-    tcp_output_segment(seg, pcb);
-    snd_nxt = ntohl(seg->tcphdr->seqno) + TCP_TCPLEN(seg);
-    if (TCP_SEQ_LT(pcb->snd_nxt, snd_nxt)) {
-      pcb->snd_nxt = snd_nxt;
-    }
-    /* put segment on unacknowledged list if length > 0 */
-    if (TCP_TCPLEN(seg) > 0) {
-      seg->next = NULL;
-      /* unacked list is empty? */
-      if (pcb->unacked == NULL) {
-        pcb->unacked = seg;
-        useg = seg;
-      /* unacked list is not empty? */
-      } else {
-        /* In the case of fast retransmit, the packet should not go to the tail
-         * of the unacked queue, but rather somewhere before it. We need to check for
-         * this case. -STJ Jul 27, 2004 */
-        if (TCP_SEQ_LT(ntohl(seg->tcphdr->seqno), ntohl(useg->tcphdr->seqno))) {
-          /* add segment to before tail of unacked list, keeping the list sorted */
-          struct tcp_seg **cur_seg = &(pcb->unacked);
-          while (*cur_seg &&
-            TCP_SEQ_LT(ntohl((*cur_seg)->tcphdr->seqno), ntohl(seg->tcphdr->seqno))) {
-              cur_seg = &((*cur_seg)->next );
-          }
-          seg->next = (*cur_seg);
-          (*cur_seg) = seg;
-        } else {
-          /* add segment to tail of unacked list */
-          useg->next = seg;
-          useg = useg->next;
-        }
-      }
-    /* do not queue empty segments on the unacked list */
-    } else {
-      tcp_seg_free(seg);
-    }
+    wnd = LWIP_MIN(pcb->snd_wnd, pcb->cwnd);
+
     seg = pcb->unsent;
-  }
-#if TCP_OVERSIZE
-  if (pcb->unsent == NULL) {
-    /* last unsent has been removed, reset unsent_oversize */
-    pcb->unsent_oversize = 0;
-  }
-#endif /* TCP_OVERSIZE */
 
-  pcb->flags &= ~TF_NAGLEMEMERR;
-  return ERR_OK;
+    /* 如果设置了TF_ACK_NOW标志并且将不发送任何数据(由于-> unsent队列为空或由于窗口不允许它),
+    请构造一个空的ACK段并发送.如果要发送数据,我们将背负ACK(见下文).
+    */
+    if (pcb->flags & TF_ACK_NOW &&
+        (seg == NULL || ntohl(seg->tcphdr->seqno) - pcb->lastack + seg->len > wnd))
+    {
+        return tcp_send_empty_ack(pcb);
+    }
+
+    /* useg应该指向未确认队列的最后一段 */
+    useg = pcb->unacked;
+    if (useg != NULL)
+    {
+        for (; useg->next != NULL; useg = useg->next);
+    }
+
+
+    /* 可用数据和窗口允许发送? */
+    while (seg != NULL && ntohl(seg->tcphdr->seqno) - pcb->lastack + seg->len <= wnd)
+    {
+        /* 如果nagle算法阻止了发送,则停止发送
+        不要停止:
+        如果tcp_write之前有内存错误(防止ACK延迟延迟)
+        或如果FIN已经加入此PCB的队列中(SYN始终在一个网段中)
+        seg->next != NULL或pcb->unacked == NULL;
+        使用tcp_write / tcp_output不发送RST.
+        */
+        if ((tcp_do_output_nagle(pcb) == 0) && ((pcb->flags & (TF_NAGLEMEMERR | TF_FIN)) == 0))
+        {
+            break;
+        }
+
+        pcb->unsent = seg->next;
+
+        if (pcb->state != SYN_SENT)
+        {
+            TCPH_SET_FLAG(seg->tcphdr, TCP_ACK);
+            pcb->flags &= ~(TF_ACK_DELAY | TF_ACK_NOW);
+        }
+
+        tcp_output_segment(seg, pcb);
+        snd_nxt = ntohl(seg->tcphdr->seqno) + TCP_TCPLEN(seg);
+        if (TCP_SEQ_LT(pcb->snd_nxt, snd_nxt))
+        {
+            pcb->snd_nxt = snd_nxt;
+        }
+
+        /* 如果长度 > 0,则将段放在未确认的列表中. */
+        if (TCP_TCPLEN(seg) > 0)
+        {
+            seg->next = NULL;
+
+            /* 未确认清单为空? */
+            if (pcb->unacked == NULL)
+            {
+                pcb->unacked = seg;
+                useg = seg;
+            }
+            else
+            {
+                /* 在快速重传的情况下,数据包不应到达未确认队列的尾部,而应到达它之前的某个位置.
+                我们需要检查这种情况. -STJ 2004年7月27日 */
+                if (TCP_SEQ_LT(ntohl(seg->tcphdr->seqno), ntohl(useg->tcphdr->seqno)))
+                {
+                    /* 将segment添加到未确认列表的尾部之前,以保持列表排序 */
+                    struct tcp_seg **cur_seg = &(pcb->unacked);
+                    while (*cur_seg && TCP_SEQ_LT(ntohl((*cur_seg)->tcphdr->seqno), ntohl(seg->tcphdr->seqno)))
+                    {
+                        cur_seg = &((*cur_seg)->next );
+                    }
+                    seg->next = (*cur_seg);
+                    (*cur_seg) = seg;
+                }
+                else
+                {
+                    /* 将segment添加到未确认列表的尾部 */
+                    useg->next = seg;
+                    useg = useg->next;
+                }
+            }
+            /* 不要将空段排在未确认的列表上 */
+        }
+        else
+        {
+            tcp_seg_free(seg);
+        }
+
+        seg = pcb->unsent;
+    }
+
+    if (pcb->unsent == NULL)
+    {
+        /* 上次未发送已删除,请重置unsent_oversize */
+        pcb->unsent_oversize = 0;
+    }
+
+    pcb->flags &= ~TF_NAGLEMEMERR;
+    return ERR_OK;
 }
 
 /**
